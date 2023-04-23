@@ -147,6 +147,8 @@ public final class DefaultGradleVersion extends GradleVersion {
     private Stage parseStage(Matcher matcher) {
         if (matcher.group(4) == null || isCommitVersion(matcher)) {
             return null;
+        } else if (isStage("buildless", matcher)) {
+            return null;
         } else if (isStage("milestone", matcher)) {
             return Stage.from(STAGE_MILESTONE, matcher.group(6));
         } else if (isStage("preview", matcher)) {
