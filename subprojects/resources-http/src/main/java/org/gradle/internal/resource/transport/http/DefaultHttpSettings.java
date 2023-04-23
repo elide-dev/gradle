@@ -39,6 +39,8 @@ public class DefaultHttpSettings implements HttpSettings {
     private final HostnameVerifier hostnameVerifier;
     private final HttpRedirectVerifier redirectVerifier;
     private final int maxRedirects;
+    private final int maxConnections;
+    private final int maxPerRouteConnections;
     private final RedirectMethodHandlingStrategy redirectMethodHandlingStrategy;
 
     private HttpProxySettings proxySettings;
@@ -54,7 +56,10 @@ public class DefaultHttpSettings implements HttpSettings {
         SslContextFactory sslContextFactory,
         HostnameVerifier hostnameVerifier,
         HttpRedirectVerifier redirectVerifier,
-        RedirectMethodHandlingStrategy redirectMethodHandlingStrategy, int maxRedirects
+        RedirectMethodHandlingStrategy redirectMethodHandlingStrategy,
+        int maxRedirects,
+        int maxConnections,
+        int maxPerRouteConnections
     ) {
         Preconditions.checkArgument(maxRedirects >= 0, "maxRedirects must be positive");
         Preconditions.checkNotNull(authenticationSettings, "authenticationSettings");
@@ -64,6 +69,8 @@ public class DefaultHttpSettings implements HttpSettings {
         Preconditions.checkNotNull(redirectMethodHandlingStrategy, "redirectMethodHandlingStrategy");
 
         this.maxRedirects = maxRedirects;
+        this.maxConnections = maxConnections;
+        this.maxPerRouteConnections = maxPerRouteConnections;
         this.authenticationSettings = authenticationSettings;
         this.sslContextFactory = sslContextFactory;
         this.hostnameVerifier = hostnameVerifier;
@@ -125,12 +132,24 @@ public class DefaultHttpSettings implements HttpSettings {
         return hostnameVerifier;
     }
 
+    @Override
+    public int getMaxConnections() {
+        return maxConnections;
+    }
+
+    @Override
+    public int getMaxPerRouteConnections() {
+        return maxPerRouteConnections;
+    }
+
     public static class Builder {
         private Collection<Authentication> authenticationSettings;
         private SslContextFactory sslContextFactory;
         private HostnameVerifier hostnameVerifier;
         private HttpRedirectVerifier redirectVerifier;
         private int maxRedirects = 10;
+        private int maxConnections = 100;
+        private int maxConnectionsPerRoute = 0;  // `0` means unlimited
         private RedirectMethodHandlingStrategy redirectMethodHandlingStrategy = RedirectMethodHandlingStrategy.ALWAYS_FOLLOW_AND_PRESERVE;
 
         public Builder withAuthenticationSettings(Collection<Authentication> authenticationSettings) {
@@ -155,6 +174,18 @@ public class DefaultHttpSettings implements HttpSettings {
             return this;
         }
 
+        public Builder maxConnections(int maxConnections) {
+            Preconditions.checkArgument(maxConnections >= 0);
+            this.maxConnections = maxConnections;
+            return this;
+        }
+
+        public Builder maxConnectionsPerRoute(int maxConnectionsPerRoute) {
+            Preconditions.checkArgument(maxConnectionsPerRoute >= 0);
+            this.maxConnectionsPerRoute = maxConnectionsPerRoute;
+            return this;
+        }
+
         public Builder maxRedirects(int maxRedirects) {
             Preconditions.checkArgument(maxRedirects >= 0);
             this.maxRedirects = maxRedirects;
@@ -167,7 +198,16 @@ public class DefaultHttpSettings implements HttpSettings {
         }
 
         public HttpSettings build() {
-            return new DefaultHttpSettings(authenticationSettings, sslContextFactory, hostnameVerifier, redirectVerifier, redirectMethodHandlingStrategy, maxRedirects);
+            return new DefaultHttpSettings(
+                authenticationSettings,
+                sslContextFactory,
+                hostnameVerifier,
+                redirectVerifier,
+                redirectMethodHandlingStrategy,
+                maxRedirects,
+                maxConnections,
+                maxConnectionsPerRoute
+            );
         }
     }
 

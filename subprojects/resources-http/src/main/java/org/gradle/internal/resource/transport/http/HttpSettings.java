@@ -31,6 +31,10 @@ public interface HttpSettings {
 
     int getMaxRedirects();
 
+    int getMaxConnections();
+
+    int getMaxPerRouteConnections();
+
     HttpRedirectVerifier getRedirectVerifier();
 
     RedirectMethodHandlingStrategy getRedirectMethodHandlingStrategy();
