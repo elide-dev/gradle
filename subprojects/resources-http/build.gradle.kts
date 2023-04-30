@@ -12,7 +12,7 @@ dependencies {
     implementation(project(":model-core"))
     implementation(project(":logging"))
 
-    implementation(libs.commonsHttpclient)
+    implementation(libs.commonsHttpclient5)
     implementation(libs.slf4jApi)
     implementation(libs.jclToSlf4j)
     implementation(libs.jcifs)

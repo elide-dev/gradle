@@ -47,6 +47,7 @@ abstract class ExternalModulesExtension(isBundleGroovy4: Boolean) {
     val commonsCodec = "commons-codec:commons-codec"
     val commonsCompress = "org.apache.commons:commons-compress"
     val commonsHttpclient = "org.apache.httpcomponents:httpclient"
+    val commonsHttpclient5 = "org.apache.httpcomponents.client5:httpclient5"
     val commonsIo = "commons-io:commons-io"
     val commonsLang = "commons-lang:commons-lang"
     val commonsLang3 = "org.apache.commons:commons-lang3"

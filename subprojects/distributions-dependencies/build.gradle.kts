@@ -60,8 +60,9 @@ dependencies {
         api(libs.bsh)                   { version { strictly("2.0b6") }}
         api(libs.capsule)               { version { strictly("0.6.3") }}
         api(libs.commonsCodec)          { version { strictly("1.15") }}
-        api(libs.commonsCompress)       { version { strictly("1.21") }}
+        api(libs.commonsCompress)       { version { strictly("1.22") }}
         api(libs.commonsHttpclient)     { version { strictly("4.5.13") }}
+        api(libs.commonsHttpclient5)    { version { strictly("5.2.1") }}
         api(libs.commonsIo)             { version { strictly("2.11.0") }}
         api(libs.commonsLang)           { version { strictly("2.6") }}
         api(libs.commonsLang3)          { version { strictly("3.12.0") }}
@@ -170,8 +171,8 @@ dependencies {
         api(libs.jettySecurity)         { version { strictly(jettyVersion) }}
         api(libs.jettyWebApp)           { version { strictly(jettyVersion) }}
         api(libs.jtar)                  { version { strictly("2.3") }}
-        api(libs.kotlinCoroutines)      { version { strictly("1.5.2") }}
-        api(libs.kotlinCoroutinesDebug) { version { strictly("1.5.2") }}
+        api(libs.kotlinCoroutines)      { version { strictly("1.7.0-RC") }}
+        api(libs.kotlinCoroutinesDebug) { version { strictly("1.7.0-RC") }}
         api(libs.littleproxy)           { version { strictly("2.0.5") }}
         api(libs.mina)                  { version { strictly("2.0.17") }}
         api(libs.mockitoCore)           { version { strictly("3.7.7") }}
