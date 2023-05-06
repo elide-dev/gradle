@@ -16,7 +16,7 @@
 
 package org.gradle.api.internal.artifacts.ivyservice.ivyresolve
 
-import org.gradle.internal.resource.transport.http.HttpErrorStatusCodeException
+import org.gradle.internal.resource.transport.http2.HttpErrorStatusCodeException
 import spock.lang.Specification
 import spock.lang.Subject
 

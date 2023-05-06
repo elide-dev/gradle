@@ -26,10 +26,10 @@ import org.gradle.caching.http.HttpBuildCache;
 import org.gradle.caching.http.HttpBuildCacheCredentials;
 import org.gradle.internal.authentication.DefaultBasicAuthentication;
 import org.gradle.internal.deprecation.Documentation;
-import org.gradle.internal.resource.transport.http.DefaultHttpSettings;
-import org.gradle.internal.resource.transport.http.HttpClientHelper;
-import org.gradle.internal.resource.transport.http.HttpSettings;
-import org.gradle.internal.resource.transport.http.SslContextFactory;
+import org.gradle.internal.resource.transport.http2.DefaultHttpSettings;
+import org.gradle.internal.resource.transport.http2.HttpClientHelper;
+import org.gradle.internal.resource.transport.http2.HttpSettings;
+import org.gradle.internal.resource.transport.http2.SslContextFactory;
 import org.gradle.internal.verifier.HttpRedirectVerifier;
 import org.gradle.internal.verifier.HttpRedirectVerifierFactory;
 
@@ -108,7 +108,7 @@ public class DefaultHttpBuildCacheServiceFactory implements BuildCacheServiceFac
         return new HttpBuildCacheService(httpClientHelper, noUserInfoUrl, requestCustomizer, useExpectContinue);
     }
 
-    private HttpRedirectVerifier createRedirectVerifier(URI url, boolean allowInsecureProtocol) {
+    private static HttpRedirectVerifier createRedirectVerifier(URI url, boolean allowInsecureProtocol) {
         return HttpRedirectVerifierFactory
             .create(
                 url,

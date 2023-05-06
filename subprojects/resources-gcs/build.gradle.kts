@@ -8,7 +8,7 @@ dependencies {
     implementation(project(":base-services"))
     implementation(project(":logging"))
     implementation(project(":resources"))
-    implementation(project(":resources-http"))
+    implementation(project(":resources-http2"))
     implementation(project(":core"))
 
     implementation(libs.slf4jApi)

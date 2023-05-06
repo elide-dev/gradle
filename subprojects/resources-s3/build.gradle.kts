@@ -9,7 +9,7 @@ dependencies {
     implementation(project(":core-api"))
     implementation(project(":core"))
     implementation(project(":resources"))
-    implementation(project(":resources-http"))
+    implementation(project(":resources-http2"))
 
     implementation(libs.slf4jApi)
     implementation(libs.guava)
@@ -24,7 +24,7 @@ dependencies {
     implementation(libs.jaxbImpl)
     implementation(libs.jacksonCore)
     implementation(libs.jacksonDatabind)
-    implementation(libs.commonsHttpclient)
+    implementation(libs.commonsHttpclient5)
     implementation(libs.commonsLang)
 
     testImplementation(testFixtures(project(":core")))

@@ -23,6 +23,9 @@ abstract class ExternalModulesExtension(isBundleGroovy4: Boolean) {
     val groovyVersion = if (isBundleGroovy4) "4.0.7" else "3.0.15"
     val configurationCacheReportVersion = "1.2"
     val kotlinVersion = "1.8.10"
+    val conscryptVersion = "2.5.2"
+    val brotliVersion = "1.11.0"
+    val zstdVersion = "1.5.5-2"
 
     fun futureKotlin(module: String) = "org.jetbrains.kotlin:kotlin-$module:$kotlinVersion"
 
@@ -42,6 +45,12 @@ abstract class ExternalModulesExtension(isBundleGroovy4: Boolean) {
     val bouncycastlePgp = "org.bouncycastle:bcpg-jdk15on"
     val bouncycastlePkix = "org.bouncycastle:bcpkix-jdk15on"
     val bouncycastleProvider = "org.bouncycastle:bcprov-jdk15on"
+    val brotli = "com.aayushatharva.brotli4j:brotli4j:$brotliVersion"
+    val brotliNativeMacosX64 = "com.aayushatharva.brotli4j:native-osx-x86_64:$brotliVersion"
+    val brotliNativeMacosAarch64 = "com.aayushatharva.brotli4j:native-osx-aarch64:$brotliVersion"
+    val brotliNativeWindowsX64 = "com.aayushatharva.brotli4j:native-windows-x86_64:$brotliVersion"
+    val brotliNativeLinuxAarch64 = "com.aayushatharva.brotli4j:native-linux-aarch64:$brotliVersion"
+    val brotliNativeLinuxX64 = "com.aayushatharva.brotli4j:native-linux-x86_64:$brotliVersion"
     val bsh = "org.apache-extras.beanshell:bsh"
     val capsule = "io.usethesource:capsule"
     val commonsCodec = "commons-codec:commons-codec"
@@ -53,6 +62,7 @@ abstract class ExternalModulesExtension(isBundleGroovy4: Boolean) {
     val commonsLang3 = "org.apache.commons:commons-lang3"
     val commonsMath = "org.apache.commons:commons-math3"
     val configurationCacheReport = "org.gradle.buildtool.internal:configuration-cache-report:$configurationCacheReportVersion"
+    val conscrypt = "org.conscrypt:conscrypt-openjdk-uber:$conscryptVersion"
     val fastutil = "it.unimi.dsi:fastutil"
     val gcs = "com.google.apis:google-api-services-storage"
     val googleApiClient = "com.google.api-client:google-api-client"
@@ -80,6 +90,8 @@ abstract class ExternalModulesExtension(isBundleGroovy4: Boolean) {
     val guava = "com.google.guava:guava"
     val hamcrest = "org.hamcrest:hamcrest-core"
     val httpcore = "org.apache.httpcomponents:httpcore"
+    val httpcore5 = "org.apache.httpcomponents.core5:httpcore5"
+    val httpcore5h2 = "org.apache.httpcomponents.core5:httpcore5-h2"
     val inject = "javax.inject:javax.inject"
     val ivy = "org.apache.ivy:ivy"
     val jacksonAnnotations = "com.fasterxml.jackson.core:jackson-annotations"
@@ -133,6 +145,7 @@ abstract class ExternalModulesExtension(isBundleGroovy4: Boolean) {
     val agp = "com.android.tools.build:gradle"
     val xbeanReflect = "org.apache.xbean:xbean-reflect"
     val xmlApis = "xml-apis:xml-apis"
+    val zstd = "com.github.luben:zstd-jni:$zstdVersion"
 
     // Compile only dependencies (dynamically downloaded if needed)
     val maven3Compat = "org.apache.maven:maven-compat"

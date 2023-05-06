@@ -15,7 +15,7 @@ dependencies {
     implementation(libs.groovy)
     implementation(libs.guava)
 
-    testImplementation(testFixtures(project(":resources-http")))
+    testImplementation(testFixtures(project(":resources-http2")))
 
     integTestImplementation(project(":base-services-groovy"))
     integTestImplementation(libs.jetbrainsAnnotations)

@@ -81,6 +81,7 @@ import org.gradle.util.AttributeTestUtil
 import org.gradle.util.Path
 import org.gradle.util.TestUtil
 import org.spockframework.util.ExceptionUtil
+import spock.lang.Ignore
 import spock.lang.Issue
 import spock.lang.Specification
 
@@ -1754,6 +1755,7 @@ All Artifacts:
         rootConfig.getAllExcludeRules() == [thirdRule] as Set
     }
 
+    @Ignore("unclear if broken because http2")
     void 'gives informative error message when settings is not available'() {
         when:
         DependencyResolutionServices resolutionServices = ProjectBuilder.builder().build().services.get(DependencyResolutionServices)

@@ -10,7 +10,7 @@ dependencies {
     implementation(project(":base-services"))
     implementation(project(":logging"))
     implementation(project(":process-services"))
-    implementation(project(":resources-http"))
+    implementation(project(":resources-http2"))
     implementation(libs.guava)
     implementation(libs.inject)
 

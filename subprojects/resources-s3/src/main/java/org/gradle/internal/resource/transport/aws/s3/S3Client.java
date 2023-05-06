@@ -43,7 +43,7 @@ import com.google.common.collect.ImmutableList;
 import org.gradle.api.credentials.PasswordCredentials;
 import org.gradle.api.credentials.AwsCredentials;
 import org.gradle.internal.resource.ResourceExceptions;
-import org.gradle.internal.resource.transport.http.HttpProxySettings;
+import org.gradle.internal.resource.transport.http2.HttpProxySettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -11,11 +11,10 @@ dependencies {
 
     pluginsRuntimeOnly(platform(project(":distributions-core")))
 
-    pluginsRuntimeOnly(project(":resources-http"))
     pluginsRuntimeOnly(project(":resources-sftp"))
     pluginsRuntimeOnly(project(":resources-s3"))
     pluginsRuntimeOnly(project(":resources-gcs"))
-    pluginsRuntimeOnly(project(":resources-http"))
+    pluginsRuntimeOnly(project(":resources-http2"))
     pluginsRuntimeOnly(project(":build-cache-http"))
 
     pluginsRuntimeOnly(project(":tooling-api-builders"))

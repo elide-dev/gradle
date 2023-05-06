@@ -47,7 +47,7 @@ dependencies {
     testImplementation(libs.commonsIo)
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":dependency-management")))
-    testImplementation(testFixtures(project(":resources-http")))
+    testImplementation(testFixtures(project(":resources-http2")))
     testImplementation(testFixtures(project(":platform-native")))
     testImplementation(testFixtures(project(":jvm-services")))
     testImplementation(testFixtures(project(":language-jvm")))

@@ -30,7 +30,7 @@ import com.amazonaws.services.s3.model.UploadPartResult
 import com.google.common.base.Optional
 import org.gradle.api.resources.ResourceException
 import org.gradle.internal.credentials.DefaultAwsCredentials
-import org.gradle.internal.resource.transport.http.HttpProxySettings
+import org.gradle.internal.resource.transport.http2.HttpProxySettings
 import spock.lang.Ignore
 import spock.lang.Specification
 

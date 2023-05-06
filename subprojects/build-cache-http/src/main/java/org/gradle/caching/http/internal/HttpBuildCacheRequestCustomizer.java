@@ -16,7 +16,7 @@
 
 package org.gradle.caching.http.internal;
 
-import org.apache.http.HttpRequest;
+import org.apache.hc.core5.http.HttpRequest;
 
 @FunctionalInterface
 public interface HttpBuildCacheRequestCustomizer {

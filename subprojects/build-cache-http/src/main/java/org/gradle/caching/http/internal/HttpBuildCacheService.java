@@ -17,15 +17,16 @@
 package org.gradle.caching.http.internal;
 
 import com.google.common.collect.ImmutableSet;
-import org.apache.http.HttpHeaders;
-import org.apache.http.HttpStatus;
-import org.apache.http.StatusLine;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.utils.URIBuilder;
-import org.apache.http.entity.AbstractHttpEntity;
-import org.apache.http.protocol.HTTP;
+import org.apache.hc.client5.http.ClientProtocolException;
+import org.apache.hc.client5.http.async.methods.SimpleHttpRequest;
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+import org.apache.hc.core5.http.HeaderElements;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.HttpStatus;
+import org.apache.hc.core5.http.Method;
+import org.apache.hc.core5.http.io.entity.AbstractHttpEntity;
+import org.apache.hc.core5.http.message.StatusLine;
+import org.apache.hc.core5.net.URIBuilder;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.caching.BuildCacheEntryReader;
 import org.gradle.caching.BuildCacheEntryWriter;
@@ -33,8 +34,8 @@ import org.gradle.caching.BuildCacheException;
 import org.gradle.caching.BuildCacheKey;
 import org.gradle.caching.BuildCacheService;
 import org.gradle.internal.UncheckedException;
-import org.gradle.internal.resource.transport.http.HttpClientHelper;
-import org.gradle.internal.resource.transport.http.HttpClientResponse;
+import org.gradle.internal.resource.transport.http2.HttpClientHelper;
+import org.gradle.internal.resource.transport.http2.HttpClientResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +52,7 @@ import java.util.Set;
 public class HttpBuildCacheService implements BuildCacheService {
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpBuildCacheService.class);
     static final String BUILD_CACHE_CONTENT_TYPE = "application/vnd.gradle.build-cache-artifact.v1";
+    static final String IDENTITY_ENCODING = "identity";
 
     private static final Set<Integer> FATAL_HTTP_ERROR_CODES = ImmutableSet.of(
         HttpStatus.SC_USE_PROXY,
@@ -61,6 +63,10 @@ public class HttpBuildCacheService implements BuildCacheService {
         426, // Upgrade required
         HttpStatus.SC_HTTP_VERSION_NOT_SUPPORTED,
         511 // network authentication required
+    );
+
+    private static final Set<Integer> EXPECTED_HTTP_ERROR_CODES = ImmutableSet.of(
+        HttpStatus.SC_REQUEST_TOO_LONG
     );
 
     private final URI root;
@@ -78,7 +84,7 @@ public class HttpBuildCacheService implements BuildCacheService {
     @Override
     public boolean load(BuildCacheKey key, BuildCacheEntryReader reader) throws BuildCacheException {
         final URI uri = root.resolve("./" + key.getHashCode());
-        HttpGet httpGet = new HttpGet(uri);
+        SimpleHttpRequest httpGet = new SimpleHttpRequest(Method.GET, uri);
         httpGet.addHeader(HttpHeaders.ACCEPT, BUILD_CACHE_CONTENT_TYPE + ", */*");
         requestCustomizer.customize(httpGet);
 
@@ -107,12 +113,12 @@ public class HttpBuildCacheService implements BuildCacheService {
         final URI uri = root.resolve(key.getHashCode());
         HttpPut httpPut = new HttpPut(uri);
         if (useExpectContinue) {
-            httpPut.setHeader(HTTP.EXPECT_DIRECTIVE, HTTP.EXPECT_CONTINUE);
+            httpPut.setHeader(HttpHeaders.EXPECT, HeaderElements.CONTINUE);
         }
         httpPut.addHeader(HttpHeaders.CONTENT_TYPE, BUILD_CACHE_CONTENT_TYPE);
         requestCustomizer.customize(httpPut);
 
-        httpPut.setEntity(new AbstractHttpEntity() {
+        httpPut.setEntity(new AbstractHttpEntity(BUILD_CACHE_CONTENT_TYPE, IDENTITY_ENCODING, false) {
             @Override
             public boolean isRepeatable() {
                 return true;
@@ -134,6 +140,11 @@ public class HttpBuildCacheService implements BuildCacheService {
             }
 
             @Override
+            public void close() throws IOException {
+                // nothing at this time
+            }
+
+            @Override
             public boolean isStreaming() {
                 return false;
             }
@@ -150,7 +161,7 @@ public class HttpBuildCacheService implements BuildCacheService {
             }
         } catch (ClientProtocolException e) {
             throw wrap(e.getCause());
-        } catch (IOException e) {
+        } catch (URISyntaxException | IOException e) {
             throw wrap(e);
         }
     }
@@ -163,11 +174,14 @@ public class HttpBuildCacheService implements BuildCacheService {
         throw new BuildCacheException(e.getMessage(), e);
     }
 
-    private boolean isHttpSuccess(int statusCode) {
+    private static boolean isHttpSuccess(int statusCode) {
         return statusCode >= 200 && statusCode < 300;
     }
 
-    private boolean throwHttpStatusCodeException(int statusCode, String message) {
+    private static boolean throwHttpStatusCodeException(int statusCode, String message) {
+        if (EXPECTED_HTTP_ERROR_CODES.contains(statusCode)) {
+            return false;
+        }
         if (FATAL_HTTP_ERROR_CODES.contains(statusCode)) {
             throw new UncheckedIOException(message);
         } else {

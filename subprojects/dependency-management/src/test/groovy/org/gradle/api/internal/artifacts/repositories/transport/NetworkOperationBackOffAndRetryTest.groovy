@@ -16,9 +16,9 @@
 
 package org.gradle.api.internal.artifacts.repositories.transport
 
-import org.apache.http.conn.HttpHostConnectException
+import org.apache.hc.client5.http.HttpHostConnectException
 import org.gradle.api.UncheckedIOException
-import org.gradle.internal.resource.transport.http.HttpErrorStatusCodeException
+import org.gradle.internal.resource.transport.http2.HttpErrorStatusCodeException
 import spock.lang.Specification
 
 class NetworkOperationBackOffAndRetryTest extends Specification {
@@ -46,7 +46,7 @@ class NetworkOperationBackOffAndRetryTest extends Specification {
         ex << [
             new SocketException("something went wrong"),
             new SocketTimeoutException("something went wrong"),
-            new HttpHostConnectException(new IOException("something went wrong"), null, null),
+            new HttpHostConnectException(null, null),
             new HttpErrorStatusCodeException("something", "something", 503, "something"),
             new RuntimeException("with cause", new SocketTimeoutException("something went wrong"))
         ]
@@ -72,7 +72,7 @@ class NetworkOperationBackOffAndRetryTest extends Specification {
         ex << [
                 new SocketException("something went wrong"),
                 new SocketTimeoutException("something went wrong"),
-                new HttpHostConnectException(new IOException("something went wrong"), null, null),
+                new HttpHostConnectException(null, null),
                 new HttpErrorStatusCodeException("something", "something", 503, "something"),
                 new RuntimeException("with cause", new SocketTimeoutException("something went wrong"))
         ]

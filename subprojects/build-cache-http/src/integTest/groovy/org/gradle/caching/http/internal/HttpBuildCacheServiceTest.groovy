@@ -16,8 +16,7 @@
 
 package org.gradle.caching.http.internal
 
-import org.apache.http.HttpHeaders
-import org.apache.http.HttpStatus
+import org.apache.hc.core5.http.HttpStatus
 import org.gradle.api.UncheckedIOException
 import org.gradle.api.internal.DocumentationRegistry
 import org.gradle.caching.BuildCacheEntryWriter
@@ -26,8 +25,8 @@ import org.gradle.caching.BuildCacheKey
 import org.gradle.caching.BuildCacheServiceFactory
 import org.gradle.caching.http.HttpBuildCache
 import org.gradle.internal.hash.HashCode
-import org.gradle.internal.resource.transport.http.DefaultSslContextFactory
-import org.gradle.internal.resource.transport.http.HttpClientHelper
+import org.gradle.internal.resource.transport.http2.DefaultSslContextFactory
+import org.gradle.internal.resource.transport.http2.HttpClientHelper
 import org.gradle.test.fixtures.file.TestNameTestDirectoryProvider
 import org.gradle.test.fixtures.server.http.AuthScheme
 import org.gradle.test.fixtures.server.http.HttpResourceInteraction
@@ -49,6 +48,10 @@ class HttpBuildCacheServiceTest extends Specification {
         426, // Upgrade required
         HttpStatus.SC_HTTP_VERSION_NOT_SUPPORTED,
         511 // network authentication required
+    ]
+
+    public static final List<Integer> NORMAL_HTTP_ERROR_CODES = [
+        HttpStatus.SC_REQUEST_TOO_LONG
     ]
 
     @Rule

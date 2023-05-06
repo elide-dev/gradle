@@ -27,6 +27,7 @@ val nativePlatformVersion = "0.22-milestone-24"
 val slf4jVersion = "1.7.30"
 val spockVersion = if (isBundleGroovy4) "2.3-groovy-4.0" else "2.3-groovy-3.0"
 val tomljVersion = "1.0.0"
+val httpClient5Version = "5.2.1"
 
 // test only
 val archunitVersion = "1.0.0-rc1"
@@ -62,7 +63,7 @@ dependencies {
         api(libs.commonsCodec)          { version { strictly("1.15") }}
         api(libs.commonsCompress)       { version { strictly("1.22") }}
         api(libs.commonsHttpclient)     { version { strictly("4.5.13") }}
-        api(libs.commonsHttpclient5)    { version { strictly("5.2.1") }}
+        api(libs.commonsHttpclient5)    { version { strictly(httpClient5Version) }}
         api(libs.commonsIo)             { version { strictly("2.11.0") }}
         api(libs.commonsLang)           { version { strictly("2.6") }}
         api(libs.commonsLang3)          { version { strictly("3.12.0") }}
@@ -94,6 +95,8 @@ dependencies {
         api(libs.hamcrest)              { version { strictly("1.3"); because("2.x changes the API") }}
         api(libs.hikariCP)              { version { strictly("4.0.2") }}
         api(libs.httpcore)              { version { strictly("4.4.14") }}
+        api(libs.httpcore5)             { version { strictly(httpClient5Version) }}
+        api(libs.httpcore5h2)           { version { strictly(httpClient5Version) }}
         api(libs.inject)                { version { strictly("1") }}
         api(libs.ivy)                   { version { strictly("2.3.0"); because("2.4.0 contains a breaking change in DefaultModuleDescriptor.getExtraInfo(), cf. https://issues.apache.org/jira/browse/IVY-1457") }}
         api(libs.jacksonAnnotations)    { version { strictly(jacksonVersion) }}

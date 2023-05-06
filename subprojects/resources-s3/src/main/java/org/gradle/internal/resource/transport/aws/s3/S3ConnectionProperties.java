@@ -20,9 +20,9 @@ import com.google.common.base.Optional;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import org.apache.commons.lang.StringUtils;
-import org.gradle.internal.resource.transport.http.HttpProxySettings;
-import org.gradle.internal.resource.transport.http.JavaSystemPropertiesHttpProxySettings;
-import org.gradle.internal.resource.transport.http.JavaSystemPropertiesSecureHttpProxySettings;
+import org.gradle.internal.resource.transport.http2.HttpProxySettings;
+import org.gradle.internal.resource.transport.http2.JavaSystemPropertiesHttpProxySettings;
+import org.gradle.internal.resource.transport.http2.JavaSystemPropertiesSecureHttpProxySettings;
 
 import java.net.URI;
 import java.net.URISyntaxException;

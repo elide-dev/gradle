@@ -57,7 +57,7 @@ dependencies {
     implementation(libs.slf4jApi)
     implementation(libs.joda)
     implementation(libs.jatl)
-    implementation(libs.commonsHttpclient)
+    implementation(libs.commonsHttpclient5)
     implementation(libs.jsch)
     implementation(libs.commonsMath)
     implementation(libs.jclToSlf4j)

@@ -16,7 +16,7 @@
 
 package org.gradle.internal.resource.transport.aws.s3
 
-import org.gradle.internal.resource.transport.http.HttpProxySettings
+import org.gradle.internal.resource.transport.http2.HttpProxySettings
 import spock.lang.Specification
 
 class S3ConnectionPropertiesTest extends Specification {

@@ -34,7 +34,7 @@ dependencies {
     testImplementation(project(":native"))
     testImplementation(project(":process-services"))
     testImplementation(project(":snapshots"))
-    testImplementation(project(":resources-http"))
+    testImplementation(project(":resources-http2"))
     testImplementation(libs.xmlunit)
     testImplementation(testFixtures(project(":core")))
     testImplementation(testFixtures(project(":model-core")))

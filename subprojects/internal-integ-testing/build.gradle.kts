@@ -63,7 +63,7 @@ dependencies {
     implementation(libs.socksProxy)
     implementation(libs.gcs)
     implementation(libs.inject)
-    implementation(libs.commonsHttpclient)
+    implementation(libs.commonsHttpclient5)
     implementation(libs.joda)
     implementation(libs.jacksonCore)
     implementation(libs.jacksonAnnotations)

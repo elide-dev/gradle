@@ -21,7 +21,7 @@ import org.gradle.caching.internal.services.BuildCacheControllerFactory
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import static org.gradle.internal.resource.transport.http.JavaSystemPropertiesHttpTimeoutSettings.SOCKET_TIMEOUT_SYSTEM_PROPERTY
+import static org.gradle.internal.resource.transport.http2.JavaSystemPropertiesHttpTimeoutSettings.SOCKET_TIMEOUT_SYSTEM_PROPERTY
 
 class HttpBuildCacheServiceErrorHandlingIntegrationTest extends HttpBuildCacheFixture {
     def setup() {

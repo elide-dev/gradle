@@ -32,7 +32,7 @@ dependencies {
 
     testFixturesImplementation(libs.jgit)
     testFixturesImplementation(libs.commonsIo)
-    testFixturesImplementation(libs.commonsHttpclient)
+    testFixturesImplementation(libs.commonsHttpclient5)
     testFixturesImplementation(libs.jsch)
     testFixturesImplementation(libs.guava)
 

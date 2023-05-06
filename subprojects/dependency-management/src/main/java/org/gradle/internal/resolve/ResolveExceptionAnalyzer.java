@@ -16,7 +16,7 @@
 package org.gradle.internal.resolve;
 
 import com.google.common.base.Throwables;
-import org.gradle.internal.resource.transport.http.HttpErrorStatusCodeException;
+import org.gradle.internal.resource.transport.http2.HttpErrorStatusCodeException;
 
 import java.io.InterruptedIOException;
 import java.util.Collection;

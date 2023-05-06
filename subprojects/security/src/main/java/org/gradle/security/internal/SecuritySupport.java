@@ -52,6 +52,10 @@ public class SecuritySupport {
             Security.setProperty("crypto.policy", "unlimited");
             Security.addProvider(new BouncyCastleProvider());
         }
+//        Provider[] providers = Security.getProviders();
+//        if (providers.length == 0 || !Conscrypt.isConscrypt(providers[0])) {
+//            Security.insertProviderAt(Conscrypt.newProvider(), 1);
+//        }
     }
 
     public static void assertInitialized() {
