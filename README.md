@@ -50,22 +50,12 @@ plugins {
 // Settings here apply on a per-project basis. See below for available settings; all properties
 // are optional, and you don't need to include this block at all if you are fine with defaults.
 elide {
-  // Use Elide's Maven resolver and downloader instead of Gradle's. Defaults to `true` when an
-  // `elide.pkl` file is present in the project root.
-  enableInstall = true
-
-  // Use Elide to compile Java instead of the stock Compiler API facilities used by Gradle.
-  // Defaults to `true` if the plugin is active in the project at all.
-  enableJavaCompiler = true
-
-  // Enable Elide project awareness for Gradle. For example, build scripts can show up as runnable
-  // exec tasks within the Gradle build.
-  enableProjectIntegration = true
-
-  // Set the path to the project manifest, expressed in Pkl format. Elide project manifests can
-  // specify dependencies, build scripts, and other project metadata. Defaults to `elide.pkl` and
-  // automatically finds any present `elide.pkl` in the active project.
-  manifest = layout.projectDirectory.file("elide.pkl")
+    // specifies to use only locally installed Elide
+    binary.useLocalOnly()
+    // specifies to use a local version if version is the same
+    binary.useLocalIfApplicable(version = "1.0.0-beta6")
+    // or
+    binary.useProjectOnly(version = null)
 }
 ```
 
