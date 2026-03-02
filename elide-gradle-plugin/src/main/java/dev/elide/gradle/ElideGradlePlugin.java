@@ -4,6 +4,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.tasks.compile.JavaCompile;
+import org.gradle.api.configuration.BuildFeatures;
 
 import javax.inject.Inject;
 import java.io.BufferedReader;
@@ -30,9 +31,13 @@ public class ElideGradlePlugin implements Plugin<Project> {
     // Project where the plugin is installed.
     private final Project activeProject;
 
+    // Project build features
+    private final BuildFeatures buildFeatures;
+
     @Inject
-    public ElideGradlePlugin(Project project) {
+    public ElideGradlePlugin(Project project, BuildFeatures buildFeatures) {
         this.activeProject = project;
+        this.buildFeatures = buildFeatures;
     }
 
     // Configure a Java compile task to use Elide instead of the standard compiler API.
@@ -136,6 +141,9 @@ public class ElideGradlePlugin implements Plugin<Project> {
         repos.mavenLocal(it -> {
             it.setName("elide");
             it.setUrl(URI.create("file://" + localDepsPath.toAbsolutePath()));
+            it.metadataSources(sources -> {
+                sources.artifact();
+            });
         });
         return Collections.emptyList();
     }
@@ -245,7 +253,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
     public void apply(Project project) {
         var elideResolved = resolvePathToElide();
         project.getLogger().debug("Elide resolved to '{}'", elideResolved);
-        if (!project.getGradle().getStartParameter().isConfigurationCacheRequested()) {
+        if (!buildFeatures.getConfigurationCache().getRequested().getOrElse(false)) {
             var versionPrinted = callElideCaptured(elideResolved, new String[]{"--version"});
             var version = versionPrinted.replace("\n", "");
             project.getLogger().lifecycle("Using Elide " + version);
@@ -284,6 +292,8 @@ public class ElideGradlePlugin implements Plugin<Project> {
                 // be aware of our Maven dependencies before `elide install` is run.
                 allPrepTasks.addAll(installMavenDepsSupport(project, extension, mustGenerateManifest));
                 installerEnabled = true;
+            } else {
+                project.getRepositories().mavenCentral();
             }
             if (installerEnabled && hasProjectManifest) {
                 // if a project manifest is present, we should run `elide install` regardless of other criteria, as it
@@ -291,20 +301,17 @@ public class ElideGradlePlugin implements Plugin<Project> {
                 shouldRunInstallWithOrWithoutMaven = true;
             }
             if (shouldRunInstallWithOrWithoutMaven) {
-                // add a precursor task to run `elide install`.
-                allPrepTasks.add(project.getTasks().create(ElideTaskName.ELIDE_TASK_INSTALL, Task.class, task -> {
+                // run elide install during configuration phase
+                project.getLogger().lifecycle("Running `elide install`...");
+                callElideCaptured(elideResolved, new String[]{"install"});
+                
+                project.getTasks().create(ElideTaskName.ELIDE_TASK_INSTALL, Task.class, task -> {
                     task.setGroup("Elide");
                     task.setDescription("Runs `elide install` to prepare the project for compilation.");
-                    task.dependsOn(allPrepTasks.stream().filter(it -> it != task).collect(Collectors.toList()));
                     task.doLast(_ -> {
-                        var start = System.currentTimeMillis();
-                        project.getLogger().info("Running `elide install`");
-                        var result = callElideCaptured(elideResolved, new String[]{"install"});
-                        var end = System.currentTimeMillis();
-                        project.getLogger().info(result);
-                        project.getLogger().lifecycle("`elide install` completed in {}ms", (end - start));
+                        callElideCaptured(elideResolved, new String[]{"install"});
                     });
-                }));
+                });            
             }
             if (!allPrepTasks.isEmpty() && javacTasks != null && !javacTasks.isEmpty()) {
                 javacTasks.forEach(javacTask -> {
