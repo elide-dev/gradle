@@ -180,3 +180,102 @@ Result: exit 0.
 - Successful process output remains suppressed but its in-memory capture is bounded. Failure output is useful up to the explicit cap.
 - Normal tests use fixture executables, direct links to the already-running test JDK for Gradle metadata only, or the in-process TestKit server; they do not use a real Elide binary, a real network endpoint, developer `PATH`, or a fake `JAVA_HOME` directory.
 - Windows-specific behavior is covered by native batch fixture execution and a Windows-only `elide.exe` compiler-wiring test. The current macOS run validates the generated batch content; Windows execution remains for the planned CI matrix rather than being deferred to another task.
+
+---
+
+## Review-fix round 2: launch failures, capture boundaries, and fixture fidelity
+
+### Implementation
+
+- Normalized the smoke build's operating-system value once and accept all names beginning with `windows`, including standard JDK values such as `Windows 10`. The platform continues to select the Windows ZIP archive and `elide.exe` smoke executable.
+- Made bounded process capture redaction-safe. Each stream retains the normal 64-KiB visible prefix plus only a bounded suffix equal to the largest inherited environment value. While rendering the visible prefix, matching environment values are replaced byte-for-byte before output is decoded. A value starting before 64 KiB is therefore fully recognized and redacted even if it ends after the visible boundary; bytes after the visible prefix are never emitted. The truncation marker remains.
+- Wrapped process-start failures from `ExecOperations` in the same structured `GradleException` used for a nonzero exit. These failures use exit code `-1`, include the executable and working-directory labels, retain the original exception as the cause, and redact its message. The exit code is protected during redaction so incidental environment values such as `1` cannot obscure `-1`.
+- Restored the install fixture's responsibility for creating `.dev/dependencies/m2`: fixture setup creates at most `.dev`, and Unix/Windows fake installers explicitly make the generated-repository directory before writing their marker.
+- Corrected Windows batch argument iteration to test raw `%1` for end-of-arguments and use `%~1` only for recording. This distinguishes no argument from an empty quoted argument, so a later argument is not dropped. A Windows-only functional task exercises `record`, empty, `after`; macOS additionally checks the generated native batch control flow without claiming to execute it.
+
+### TDD evidence
+
+#### RED
+
+The standard native OS spelling first failed exactly as reported:
+
+```text
+./gradlew :elide-gradle-plugin:realRuntimeSmoke --dry-run -Dos.name='Windows 10' -Dos.arch=amd64
+```
+
+Result: `Unsupported OS: Windows 10` at `build.gradle.kts:45`.
+
+Focused regression tests were then added before production changes:
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.DependencyInstallFunctionalTest.installCreatesTheGeneratedRepositoryWhenItIsInitiallyAbsent --tests dev.elide.gradle.DependencyInstallFunctionalTest.windowsFixtureUsesABatchExecutableAndRecordsArgumentsIndividually --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.reportsAnUnstartableExecutableAsAStructuredRedactedFailure
+```
+
+Result: `3 tests completed, 3 failed`.
+
+- The fixture had already created the repository before the install task.
+- The batch script used `%~1` for both empty and absent arguments.
+- A missing interpreter bypassed the required process-failure structure and did not report an exit code.
+
+The boundary test was separately made red after aligning the secret's start with the 64-KiB capture edge:
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.redactsAnEnvironmentValueThatCrossesTheCaptureBoundary
+```
+
+Result: failed because the captured prefix `cross-boundary-secret` appeared in the diagnostic.
+
+#### GREEN
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.DependencyInstallFunctionalTest.installCreatesTheGeneratedRepositoryWhenItIsInitiallyAbsent --tests dev.elide.gradle.DependencyInstallFunctionalTest.windowsFixtureUsesABatchExecutableAndRecordsArgumentsIndividually --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.redactsAnEnvironmentValueThatCrossesTheCaptureBoundary --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.reportsAnUnstartableExecutableAsAStructuredRedactedFailure
+```
+
+Result: `BUILD SUCCESSFUL in 6s`. The initial repository is absent before the task and present after it; the boundary secret prefix is absent; and the unstartable executable produces labeled, redacted context with `exit code -1`.
+
+```text
+./gradlew :elide-gradle-plugin:realRuntimeSmoke --dry-run -Dos.name='Windows 10' -Dos.arch=amd64
+```
+
+Result: `BUILD SUCCESSFUL`; the Windows smoke graph configured without network or runtime execution.
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest
+```
+
+Result: `BUILD SUCCESSFUL in 32s`.
+
+### Final verification
+
+```text
+./gradlew :elide-gradle-plugin:test :elide-gradle-plugin:functionalTest --configuration-cache
+```
+
+Result: `BUILD SUCCESSFUL in 1s`; configuration-cache entry stored.
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --configuration-cache
+```
+
+Result: `BUILD SUCCESSFUL in 285ms`; `Configuration cache entry reused.`
+
+```text
+git diff --check
+```
+
+Result: exit 0.
+
+### Files changed in this round
+
+- `elide-gradle-plugin/build.gradle.kts`
+- `elide-gradle-plugin/src/main/java/dev/elide/gradle/ElideExecTask.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/PlatformFixture.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/DependencyInstallFunctionalTest.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/CompilerIntegrationFunctionalTest.java`
+
+### Self-review
+
+- Capture remains bounded: its retained raw suffix is limited to the largest environment value needed to complete a match, and only the redacted first 64 KiB can enter a diagnostic.
+- Process-start exceptions cannot escape the structured/redacted error path. A numeric exit-code marker avoids a one-character inherited environment value masking the required status.
+- The native batch script now distinguishes an empty `""` argument from the exhausted argument list. The Windows-only functional assertion is deliberately conditional; the macOS test asserts the batch syntax rather than pretending it was executed.
+- Fixture setup no longer creates generated Maven output. The fake installers do, while no normal test uses a real Elide executable, real network, or developer `PATH`.
