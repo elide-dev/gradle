@@ -77,9 +77,10 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     task.getElideExecutable().set(resolution.executable());
                     task.getElideArguments().set(List.of("install"));
                     task.getWorkingDirectory().set(project.getLayout().getProjectDirectory());
+                    task.getWorkingDirectoryPath().set(project.getProjectDir().getAbsolutePath());
                     task.getManifest().set(extension.getManifest());
-                    task.getDevRoot().set(extension.getDevRoot());
-                    task.getLockfile().set(extension.resolveLockfilePath());
+                    task.getDevRootInputs().from(project.fileTree(extension.getDevRoot())
+                            .exclude("dependencies/**", "elide.lock.bin"));
                     task.getGeneratedDependencyRepository().set(extension.getDevRoot().dir("dependencies/m2"));
                     addManagedPreparationDependency(task, resolution);
                 });

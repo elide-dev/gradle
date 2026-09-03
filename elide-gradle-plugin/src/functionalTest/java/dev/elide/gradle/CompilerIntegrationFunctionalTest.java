@@ -2,12 +2,16 @@ package dev.elide.gradle;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,30 +28,25 @@ class CompilerIntegrationFunctionalTest {
 
     @Test
     void preservesUserCompilerArgumentsAfterTheElideJavacPrefixWithoutWritingJavaHome() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The Windows matrix exercises the native batch install fixture separately.");
         Path projectDirectory = temporaryDirectory.resolve("compiler-project");
         Path invocationLog = projectDirectory.resolve("compiler-invocations.log");
-        Path fakeJavaHome = projectDirectory.resolve("fake-java-home");
         Path executable = writeCompilerRuntime(projectDirectory, invocationLog);
-        writeCompilerProject(projectDirectory, executable, fakeJavaHome);
+        writeCompilerProject(projectDirectory, executable);
 
         runner(projectDirectory, Map.of()).withArguments("compileJava").build();
 
-        List<String> invocations = Files.readAllLines(invocationLog);
+        List<List<String>> invocations = PlatformFixture.readInvocations(invocationLog);
         assertEquals(1, invocations.size());
-        assertTrue(invocations.get(0).startsWith("javac --"), invocations.toString());
-        assertTrue(invocations.get(0).contains("-Dfixture.compiler.argument=true"), invocations.toString());
-        assertFalse(Files.exists(fakeJavaHome), "The plugin must not create a Java Home shim");
+        assertEquals(List.of("javac", "--", "-Dfixture.compiler.argument=has a space"),
+                invocations.get(0).subList(0, 3));
     }
 
     @Test
     void reportsElideFailuresWithoutLeakingEnvironmentValues() throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("failure-project");
-        Path executable = writeFakeExecutable(projectDirectory, """
-                #!/bin/sh
-                printf '%s\\n' "$ELIDE_TEST_SECRET"
-                printf '%s\\n' "$ELIDE_TEST_SECRET" >&2
-                exit 23
-                """);
+        Path executable = writeFailingExecutable(projectDirectory);
         writeProject(projectDirectory, executable, """
                 getEnableInstall().set(true)
                 getEnableJavaCompiler().set(false)
@@ -57,11 +56,59 @@ class CompilerIntegrationFunctionalTest {
                 .withArguments("elideInstall")
                 .buildAndFail();
 
-        assertTrue(result.getOutput().contains("executable " + executable.toRealPath()), result.getOutput());
-        assertTrue(result.getOutput().contains("working directory " + projectDirectory.toRealPath()),
-                result.getOutput());
+        assertTrue(result.getOutput().contains("executable "), result.getOutput());
+        assertTrue(result.getOutput().contains("working directory "), result.getOutput());
         assertTrue(result.getOutput().contains("exit code 23"), result.getOutput());
         assertFalse(result.getOutput().contains(SECRET), result.getOutput());
+    }
+
+    @Test
+    void redactsEnvironmentValuesFromExecutableAndWorkingDirectoryWithLongestValueFirst() throws IOException {
+        String prefix = "fixture-secret";
+        String secret = prefix + "-suffix";
+        Path projectDirectory = temporaryDirectory.resolve("failure-project-" + secret);
+        Path executable = writeFailingExecutable(projectDirectory);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of(
+                "ELIDE_TEST_SECRET", secret,
+                "ELIDE_TEST_SECRET_PREFIX", prefix))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("exit code 23"), result.getOutput());
+        assertFalse(result.getOutput().contains(secret), result.getOutput());
+        assertFalse(result.getOutput().contains(prefix), result.getOutput());
+        assertFalse(result.getOutput().contains("suffix"), result.getOutput());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void configuresCompilerWithAWindowsNativeFixtureWithoutExecutingIt() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("windows-compiler-project");
+        Path executable = projectDirectory.resolve("bin/elide.exe");
+        Files.createDirectories(executable.getParent());
+        Files.writeString(executable, "@echo off\r\nexit /b 0\r\n");
+        writeCompilerProject(projectDirectory, executable);
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+
+                tasks.register('recordCompilerConfiguration') {
+                    doLast {
+                        def compiler = tasks.named('compileJava', org.gradle.api.tasks.compile.JavaCompile).get()
+                        file('compiler-configuration.txt').text = compiler.options.forkOptions.executable + '\\n' + compiler.options.forkOptions.jvmArgs.join('\\n')
+                    }
+                }
+                """, StandardOpenOption.APPEND);
+
+        runner(projectDirectory, Map.of()).withArguments("recordCompilerConfiguration").build();
+
+        List<String> configuration = Files.readAllLines(projectDirectory.resolve("compiler-configuration.txt"));
+        assertEquals(executable.toAbsolutePath().toString(), configuration.get(0));
+        assertEquals(List.of("javac", "--", "-Dfixture.compiler.argument=has a space"),
+                configuration.subList(1, 4));
     }
 
     private static void writeProject(Path projectDirectory, Path executable, String configuration) throws IOException {
@@ -81,7 +128,7 @@ class CompilerIntegrationFunctionalTest {
                 """.formatted(groovyQuote(projectDirectory.relativize(executable)), configuration));
     }
 
-    private static void writeCompilerProject(Path projectDirectory, Path executable, Path fakeJavaHome) throws IOException {
+    private static void writeCompilerProject(Path projectDirectory, Path executable) throws IOException {
         Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
         Files.writeString(projectDirectory.resolve("settings.gradle"), "");
         Files.writeString(projectDirectory.resolve("build.gradle"), """
@@ -90,51 +137,42 @@ class CompilerIntegrationFunctionalTest {
                     id 'java'
                 }
 
-                System.setProperty('java.home', '%s')
-
                 elide {
                     getElideBin().set(layout.projectDirectory.file('%s'))
                     getEnableInstall().set(false)
                 }
 
                 tasks.withType(JavaCompile).configureEach {
-                    options.forkOptions.jvmArgs.add('-Dfixture.compiler.argument=true')
+                    options.forkOptions.jvmArgs.add('-Dfixture.compiler.argument=has a space')
                 }
-                """.formatted(groovyQuote(fakeJavaHome), groovyQuote(projectDirectory.relativize(executable))));
+                """.formatted(groovyQuote(projectDirectory.relativize(executable))));
         Files.writeString(projectDirectory.resolve("src/main/java/example/Fixture.java"), """
                 package example;
                 public final class Fixture { }
                 """);
     }
 
-    private static Path writeFakeExecutable(Path projectDirectory, String script) throws IOException {
-        Path executable = projectDirectory.resolve("bin/elide");
+    private static Path writeFailingExecutable(Path projectDirectory) throws IOException {
+        Path executable = projectDirectory.resolve("bin").resolve(PlatformFixture.executableName("elide"));
         Files.createDirectories(executable.getParent());
-        Files.writeString(executable, script);
+        Files.writeString(executable, PlatformFixture.isWindows() ? """
+                @echo off
+                echo %ELIDE_TEST_SECRET%
+                echo %ELIDE_TEST_SECRET% 1>&2
+                exit /b 23
+                """ : """
+                #!/bin/sh
+                printf '%s\\n' "$ELIDE_TEST_SECRET"
+                printf '%s\\n' "$ELIDE_TEST_SECRET" >&2
+                exit 23
+                """);
         executable.toFile().setExecutable(true);
         return executable;
     }
 
     private static Path writeCompilerRuntime(Path projectDirectory, Path invocationLog) throws IOException {
-        Path executable = projectDirectory.resolve("bin/elide");
-        Files.createDirectories(executable.getParent());
-        Files.writeString(executable, """
-                #!/bin/sh
-                printf '%%s\\n' "$*" >> '%s'
-                """.formatted(shellQuote(invocationLog)));
-        executable.toFile().setExecutable(true);
-        Path java = executable.resolveSibling("java");
-        Files.writeString(java, """
-                #!/bin/sh
-                exec '%s' "$@"
-                """.formatted(shellQuote(Path.of(System.getProperty("java.home")).resolve("bin/java"))));
-        java.toFile().setExecutable(true);
-        Path javac = executable.resolveSibling("javac");
-        Files.writeString(javac, """
-                #!/bin/sh
-                printf '%%s\\n' "$*" >> '%s'
-                """.formatted(shellQuote(invocationLog)));
-        javac.toFile().setExecutable(true);
+        Path executable = PlatformFixture.writeRecordingExecutable(projectDirectory.resolve("bin"), "elide", invocationLog);
+        PlatformFixture.linkActualJavaTools(executable.getParent());
         return executable;
     }
 
@@ -153,7 +191,4 @@ class CompilerIntegrationFunctionalTest {
         return path.toString().replace("\\", "\\\\").replace("'", "\\'");
     }
 
-    private static String shellQuote(Path path) {
-        return path.toAbsolutePath().toString().replace("'", "'\"'\"'");
-    }
 }

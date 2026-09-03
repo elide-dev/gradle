@@ -48,6 +48,8 @@ val elideReleasePlatform = when (System.getProperty("os.name").lowercase()) {
     "mac os x" -> "macos-$elideArch"
     else -> elidePlatform
 }
+val elideArchiveExtension = if (elidePlatform.startsWith("windows-")) "zip" else "tgz"
+val elideExecutableName = if (elidePlatform.startsWith("windows-")) "elide.exe" else "elide"
 
 val elideRuntime: Configuration by configurations.creating {
     isCanBeResolved = true
@@ -97,15 +99,16 @@ val functionalTestTask = tasks.register<Test>("functionalTest") {
 }
 
 val downloadElide by tasks.registering(Download::class) {
-    src("https://github.com/elide-dev/elide/releases/download/$elideVersion/elide.$elideReleasePlatform.tgz")
-    dest(layout.buildDirectory.file("elide-runtime/elide.tgz"))
-    outputs.file(layout.buildDirectory.file("elide-runtime/elide.tgz"))
+    src("https://github.com/elide-dev/elide/releases/download/$elideVersion/elide.$elideReleasePlatform.$elideArchiveExtension")
+    dest(layout.buildDirectory.file("elide-runtime/elide.$elideArchiveExtension"))
+    outputs.file(layout.buildDirectory.file("elide-runtime/elide.$elideArchiveExtension"))
 }
 
 val extractElide by tasks.registering(Copy::class) {
-    from(tarTree(layout.buildDirectory.file("elide-runtime/elide.tgz")))
+    val archive = layout.buildDirectory.file("elide-runtime/elide.$elideArchiveExtension")
+    from(if (elideArchiveExtension == "zip") zipTree(archive) else tarTree(archive))
     into(layout.buildDirectory.dir("elide-runtime"))
-    inputs.file(layout.buildDirectory.file("elide-runtime/elide.tgz"))
+    inputs.file(archive)
     dependsOn(downloadElide)
 }
 
@@ -116,7 +119,7 @@ val prepareElide by tasks.registering {
 }
 
 val realRuntimeSmoke by tasks.registering(Exec::class) {
-    executable = runtimeHome.get().file("bin/elide").asFile.absolutePath
+    executable = runtimeHome.get().file("bin/$elideExecutableName").asFile.absolutePath
     args("--version")
     dependsOn(downloadElide, extractElide, prepareElide)
 }

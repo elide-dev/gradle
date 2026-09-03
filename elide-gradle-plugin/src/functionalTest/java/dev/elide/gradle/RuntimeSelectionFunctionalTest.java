@@ -20,21 +20,23 @@ class RuntimeSelectionFunctionalTest {
 
     @Test
     void explicitRuntimeConfigurationDoesNotExecuteElideDuringConfiguration() throws IOException {
-        assertConfigurationIsPure("elideBin = layout.projectDirectory.file('bin/elide')");
+        assertConfigurationIsPure(true);
     }
 
     @Test
     void pathRuntimeConfigurationDoesNotExecuteElideDuringConfiguration() throws IOException {
-        assertConfigurationIsPure("runtimeMode = dev.elide.gradle.ElideRuntimeMode.PATH");
+        assertConfigurationIsPure(false);
     }
 
-    private void assertConfigurationIsPure(String runtimeConfiguration) throws IOException {
+    private void assertConfigurationIsPure(boolean explicitRuntime) throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("project");
         Path executableDirectory = projectDirectory.resolve("bin");
-        Path executable = executableDirectory.resolve("elide");
+        Path executable = executableDirectory.resolve(PlatformFixture.isWindows() ? "elide.exe" : "elide");
         Path invocationLog = projectDirectory.resolve("elide-invocations.log");
         Files.createDirectories(executableDirectory);
-        Files.writeString(executable, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
+        Files.writeString(executable, PlatformFixture.isWindows()
+                ? "@echo off\r\necho called>>\"" + invocationLog + "\"\r\nexit /b 0\r\n"
+                : "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
         executable.toFile().setExecutable(true);
         Files.writeString(projectDirectory.resolve("settings.gradle"), "");
         Files.writeString(projectDirectory.resolve("build.gradle"), """
@@ -46,7 +48,9 @@ class RuntimeSelectionFunctionalTest {
                 elide {
                     %s
                 }
-                """.formatted(runtimeConfiguration));
+                """.formatted(explicitRuntime
+                ? "elideBin = layout.projectDirectory.file('bin/" + executable.getFileName() + "')"
+                : "runtimeMode = dev.elide.gradle.ElideRuntimeMode.PATH"));
 
         BuildResult first = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
                 .withArguments("--configuration-cache", "help")
