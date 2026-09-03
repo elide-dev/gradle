@@ -22,7 +22,6 @@ public class ElideExtension implements ElideExtensionConfig {
     protected boolean enableJavacIntegration = true;
     protected boolean enableProjectIntegration = true;
     protected boolean enableMavenIntegration = true;
-    protected boolean enableShim = true;
     protected Property<Boolean> doEnableInstall;
     protected Property<Boolean> doEmbeddedBuild;
     protected Property<Boolean> doUseMavenIntegration;
@@ -102,10 +101,6 @@ public class ElideExtension implements ElideExtensionConfig {
     @Override
     public Property<Boolean> getVerbose() {
         return enableVerboseMode;
-    }
-
-    boolean enableShim() {
-        return enableShim;
     }
 
     Path resolveLocalDepsPath() {

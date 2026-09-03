@@ -56,8 +56,6 @@ jobs:
         run: cd ./example-project && elide install
       - name: "Setup: Dependencies (Remote Example)"
         run: cd ./example-project-remote && elide install
-      - name: "Setup: Gradle Java Compiler Shim"
-        run: cp -fv ./.github/workflows/shim.sh $JAVA_HOME/bin/elide-javac && chmod +x $JAVA_HOME/bin/elide-javac
       - name: "Build: Projects"
         run: ./gradlew --stacktrace --info --no-daemon build
       - name: "Build: Remote Example"
