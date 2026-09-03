@@ -109,3 +109,18 @@ Focused verification:
 ```
 
 Result: `BUILD SUCCESSFUL in 1s`, 4 tests, zero failures/errors. Existing mismatch coverage continues to prove that failed verification preserves the target and leaves no temporary download files.
+
+## Review fix round 2: unchecked cleanup failures
+
+The first review fix aggregated only `IOException` cleanup failures. A provider can instead raise an unchecked failure such as `SecurityException`; that would escape the first cleanup attempt, skip the archive cleanup, and mask the primary failure.
+
+Cleanup aggregation now handles `IOException`, `RuntimeException`, and `Error` independently for each temporary path. If the download operation already failed, every cleanup failure is suppressed on that original throwable. Otherwise, the first cleanup failure is rethrown in its original type with later cleanup failures suppressed beneath it. A deterministic test would again require a filesystem injection seam only for static JDK deletion faults, so no production abstraction was added.
+
+Verification:
+
+```text
+./gradlew :elide-gradle-plugin:test --tests 'dev.elide.gradle.ElideDownloaderTest'
+git diff --check
+```
+
+Result: `BUILD SUCCESSFUL in 1s`; downloader unit suite has 4 tests with zero failures/errors; whitespace check exits 0.

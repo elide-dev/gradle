@@ -57,35 +57,53 @@ public final class ElideDownloader {
             failure = exception;
             throw exception;
         } finally {
-            IOException cleanupFailure = deleteTemporaryFiles(checksumTemporary, archiveTemporary);
+            Throwable cleanupFailure = deleteTemporaryFiles(checksumTemporary, archiveTemporary);
             if (cleanupFailure != null) {
                 if (failure != null) {
                     failure.addSuppressed(cleanupFailure);
                 } else {
-                    throw cleanupFailure;
+                    throwCleanupFailure(cleanupFailure);
                 }
             }
         }
     }
 
-    private static IOException deleteTemporaryFiles(Path checksumTemporary, Path archiveTemporary) {
-        IOException failure = deleteTemporaryFile(checksumTemporary, null);
+    private static Throwable deleteTemporaryFiles(Path checksumTemporary, Path archiveTemporary) {
+        Throwable failure = deleteTemporaryFile(checksumTemporary, null);
         return deleteTemporaryFile(archiveTemporary, failure);
     }
 
-    private static IOException deleteTemporaryFile(Path temporary, IOException failure) {
+    private static Throwable deleteTemporaryFile(Path temporary, Throwable failure) {
         if (temporary == null) {
             return failure;
         }
         try {
             Files.deleteIfExists(temporary);
-        } catch (IOException exception) {
-            if (failure == null) {
-                return exception;
-            }
-            failure.addSuppressed(exception);
+        } catch (IOException | RuntimeException | Error exception) {
+            return appendSuppressed(failure, exception);
         }
         return failure;
+    }
+
+    private static Throwable appendSuppressed(Throwable failure, Throwable next) {
+        if (failure == null) {
+            return next;
+        }
+        failure.addSuppressed(next);
+        return failure;
+    }
+
+    private static void throwCleanupFailure(Throwable failure) throws IOException {
+        if (failure instanceof IOException exception) {
+            throw exception;
+        }
+        if (failure instanceof RuntimeException exception) {
+            throw exception;
+        }
+        if (failure instanceof Error exception) {
+            throw exception;
+        }
+        throw new IOException("Unable to clean temporary Elide download", failure);
     }
 
     public static String parseSha256(String checksumFile) {
