@@ -1,11 +1,19 @@
 import de.undercouch.gradle.tasks.download.Download
 
 plugins {
-    `maven-publish`
     `java-gradle-plugin`
+    `maven-publish`
     signing
-    id("com.gradle.plugin-publish") version "1.2.1"
-    id("de.undercouch.download") version "5.6.0"
+    alias(libs.plugins.plugin.publish)
+    alias(libs.plugins.download.task)
+}
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+}
+
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set(17)
 }
 
 val elideVersion = findProperty("elide.version")?.toString() ?: error(
@@ -41,10 +49,6 @@ val elideReleasePlatform = when (System.getProperty("os.name").lowercase()) {
     else -> elidePlatform
 }
 
-repositories {
-    mavenCentral()
-}
-
 val elideRuntime: Configuration by configurations.creating {
     isCanBeResolved = true
 }
@@ -52,8 +56,17 @@ val elideRuntime: Configuration by configurations.creating {
 dependencies {
     elideRuntime(files(zipTree(rootProject.layout.buildDirectory.dir("elide-runtime"))))
 
-    // Use JUnit test framework for unit tests
-    testImplementation("junit:junit:4.13.1")
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+
+dependencyLocking {
+    lockAllConfigurations()
 }
 
 gradlePlugin {
@@ -74,6 +87,7 @@ val functionalTest: SourceSet by sourceSets.creating
 gradlePlugin.testSourceSets(functionalTest)
 
 configurations[functionalTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
 
 val runtimeHome = layout.buildDirectory.dir("elide-runtime")
 

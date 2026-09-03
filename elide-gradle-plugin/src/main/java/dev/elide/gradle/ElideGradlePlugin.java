@@ -261,7 +261,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
         var extension = new ElideExtension(project, objectUtil);
         project.getExtensions().add(elideExtensionName, extension);
 
-        project.afterEvaluate(_ -> {
+        project.afterEvaluate(ignored -> {
             var pluginManager = project.getPluginManager();
             var javaPluginActive = pluginManager.hasPlugin(javaPluginId);
             var javacSupportActive = enableJavacShim(project, extension);
@@ -302,7 +302,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     task.setGroup("Elide");
                     task.setDescription("Runs `elide install` to prepare the project for compilation.");
                     task.dependsOn(allPrepTasks.stream().filter(it -> it != task).collect(Collectors.toList()));
-                    task.doLast(_ -> {
+                    task.doLast(ignoredTaskAction -> {
                         var start = System.currentTimeMillis();
                         project.getLogger().info("Running `elide install`");
                         var result = callElideCaptured(elideResolved, new String[]{"install"});
