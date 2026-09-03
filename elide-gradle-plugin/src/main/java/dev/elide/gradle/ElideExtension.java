@@ -28,6 +28,8 @@ public class ElideExtension implements ElideExtensionConfig {
     protected Property<Boolean> doUseMavenIntegration;
     protected Property<Boolean> doEnableProjects;
     protected Property<Boolean> doEnableJavaCompiler;
+    protected Property<ElideRuntimeMode> doRuntimeMode;
+    protected Property<String> doRuntimeVersion;
     protected Property<Boolean> doResolveElideFromPath;
     protected Property<Boolean> enableDebugMode;
     protected Property<Boolean> enableVerboseMode;
@@ -67,6 +69,7 @@ public class ElideExtension implements ElideExtensionConfig {
     }
 
     @Override
+    @Deprecated
     public Property<Boolean> getResolveElideFromPath() {
         return doResolveElideFromPath;
     }
@@ -79,6 +82,16 @@ public class ElideExtension implements ElideExtensionConfig {
     @Override
     public RegularFileProperty getElideBin() {
         return activeElideBin;
+    }
+
+    @Override
+    public Property<ElideRuntimeMode> getRuntimeMode() {
+        return doRuntimeMode;
+    }
+
+    @Override
+    public Property<String> getRuntimeVersion() {
+        return doRuntimeVersion;
     }
 
     @Override
@@ -112,7 +125,9 @@ public class ElideExtension implements ElideExtensionConfig {
         this.doUseMavenIntegration = objects.property(Boolean.class).convention(enableMavenIntegration);
         this.doEnableProjects = objects.property(Boolean.class).convention(enableProjectIntegration);
         this.doEnableJavaCompiler = objects.property(Boolean.class).convention(enableJavacIntegration);
-        this.doResolveElideFromPath = objects.property(Boolean.class).convention(false);
+        this.doRuntimeMode = objects.property(ElideRuntimeMode.class).convention(ElideRuntimeMode.AUTO);
+        this.doRuntimeVersion = objects.property(String.class).convention("1.5.1+20260903");
+        this.doResolveElideFromPath = objects.property(Boolean.class);
         this.projectManifest = objects.fileProperty()
                 .convention(project.getLayout().getProjectDirectory().file("elide.pkl"));
 

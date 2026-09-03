@@ -12,6 +12,9 @@ public interface ElideExtensionConfig {
     Property<Boolean> getEnableProjectIntegration();
     RegularFileProperty getManifest();
     RegularFileProperty getElideBin();
+    Property<ElideRuntimeMode> getRuntimeMode();
+    Property<String> getRuntimeVersion();
+    @Deprecated
     Property<Boolean> getResolveElideFromPath();
     Property<Boolean> getDebug();
     Property<Boolean> getVerbose();
