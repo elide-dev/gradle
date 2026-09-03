@@ -78,11 +78,36 @@ class DependencyInstallFunctionalTest {
     }
 
     @Test
+    void installCreatesTheGeneratedRepositoryWhenItIsInitiallyAbsent() throws IOException {
+        Fixture fixture = Fixture.create(temporaryDirectory.resolve("install-creates-repository"), true, true);
+        Path repository = fixture.projectDirectory().resolve(".dev/dependencies/m2");
+
+        assertFalse(Files.exists(repository));
+        fixture.runner().withArguments("elideInstall").build();
+
+        assertTrue(Files.isDirectory(repository));
+        assertTrue(Files.isRegularFile(repository.resolve("fixture-install.marker")));
+    }
+
+    @Test
     void windowsFixtureUsesABatchExecutableAndRecordsArgumentsIndividually() {
         assertEquals("elide.cmd", PlatformFixture.executableNameFor("elide", "Windows 11"));
         String script = PlatformFixture.recordingScriptFor("Windows 11", temporaryDirectory);
         assertTrue(script.contains("@echo off"));
         assertTrue(script.contains("echo(%~1"));
+        assertTrue(script.contains("if \"%1\"==\"\" goto recorded"));
+        assertFalse(script.contains("if \"%~1\"==\"\" goto recorded"));
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
+    void windowsFixtureRecordsEmptyArgumentsWithoutEndingIteration() throws IOException {
+        Fixture fixture = Fixture.create(temporaryDirectory.resolve("windows-empty-arguments"), true, true);
+
+        fixture.runner().withArguments("recordEmptyArguments").build();
+
+        assertEquals(java.util.List.of(java.util.List.of("record", "", "after")),
+                PlatformFixture.readInvocations(fixture.invocationDirectory()));
     }
 
     private record Fixture(Path projectDirectory, Path invocationDirectory) {
@@ -90,7 +115,7 @@ class DependencyInstallFunctionalTest {
                 throws IOException {
             Path invocationDirectory = projectDirectory.resolve("elide-invocations");
             if (enableInstall) {
-                Files.createDirectories(projectDirectory.resolve(".dev/dependencies/m2"));
+                Files.createDirectories(projectDirectory.resolve(".dev"));
             }
             Path executable = PlatformFixture.writeRecordingExecutable(
                     projectDirectory.resolve("bin"), "elide", invocationDirectory);
@@ -122,8 +147,19 @@ class DependencyInstallFunctionalTest {
                             file('elide-repository.txt').text = repository == null ? '' : repository.url.toString()
                         }
                     }
+
+                    tasks.register('recordEmptyArguments', dev.elide.gradle.ElideExecTask) {
+                        getElideExecutable().set(layout.projectDirectory.file('%s'))
+                        getElideArguments().set(['record', '', 'after'])
+                        getWorkingDirectory().set(layout.projectDirectory)
+                        getWorkingDirectoryPath().set(projectDir.absolutePath)
+                        getManifest().set(layout.projectDirectory.file('elide.pkl'))
+                        getDevRootInputs().from(fileTree('.dev').exclude('dependencies/**', 'elide.lock.bin'))
+                        getGeneratedDependencyRepository().set(layout.projectDirectory.dir('empty-argument-output'))
+                    }
                     """.formatted(groovyQuote(projectDirectory.relativize(executable)),
-                    enableInstall, enableMavenIntegration));
+                    enableInstall, enableMavenIntegration,
+                    groovyQuote(projectDirectory.relativize(executable))));
             return new Fixture(projectDirectory, invocationDirectory);
         }
 

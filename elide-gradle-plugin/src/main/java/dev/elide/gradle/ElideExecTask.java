@@ -32,6 +32,7 @@ import java.util.Locale;
 @DisableCachingByDefault(because = "Elide commands may change dependency state outside declared outputs.")
 public abstract class ElideExecTask extends DefaultTask {
     private static final int MAX_CAPTURED_OUTPUT_BYTES = 64 * 1024;
+    private static final byte[] REDACTION_MARKER = "[redacted]".getBytes(StandardCharsets.UTF_8);
 
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
@@ -67,20 +68,29 @@ public abstract class ElideExecTask extends DefaultTask {
     public void executeElide() {
         BoundedOutputStream standardOutput = new BoundedOutputStream();
         BoundedOutputStream errorOutput = new BoundedOutputStream();
-        ExecResult result = getExecOperations().exec(spec -> {
-            var executable = getElideExecutable().get().getAsFile();
-            if (isWindowsBatchScript(executable)) {
-                spec.executable(System.getenv().getOrDefault("ComSpec", "cmd.exe"));
-                spec.args("/d", "/c", executable.getAbsolutePath());
-            } else {
-                spec.executable(executable);
-            }
-            spec.args(getElideArguments().get());
-            spec.setWorkingDir(getWorkingDirectory().get().getAsFile());
-            spec.setStandardOutput(standardOutput);
-            spec.setErrorOutput(errorOutput);
-            spec.setIgnoreExitValue(true);
-        });
+        ExecResult result;
+        try {
+            result = getExecOperations().exec(spec -> {
+                var executable = getElideExecutable().get().getAsFile();
+                if (isWindowsBatchScript(executable)) {
+                    spec.executable(System.getenv().getOrDefault("ComSpec", "cmd.exe"));
+                    spec.args("/d", "/c", executable.getAbsolutePath());
+                } else {
+                    spec.executable(executable);
+                }
+                spec.args(getElideArguments().get());
+                spec.setWorkingDir(getWorkingDirectory().get().getAsFile());
+                spec.setStandardOutput(standardOutput);
+                spec.setErrorOutput(errorOutput);
+                spec.setIgnoreExitValue(true);
+            });
+        } catch (RuntimeException exception) {
+            throw new GradleException(failureMessage(
+                    -1,
+                    standardOutput.content(),
+                    exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()),
+                    exception);
+        }
         if (result.getExitValue() != 0) {
             throw new GradleException(failureMessage(
                     result.getExitValue(),
@@ -90,31 +100,35 @@ public abstract class ElideExecTask extends DefaultTask {
     }
 
     private String failureMessage(int exitCode, String standardOutput, String errorOutput) {
+        String exitCodeMarker = "\u0000ELIDE_EXIT_CODE\u0000";
         String message = "Elide command failed: executable "
                 + getElideExecutable().get().getAsFile().getAbsolutePath()
                 + ", working directory "
                 + getWorkingDirectory().get().getAsFile().getAbsolutePath()
-                + ", exit code " + exitCode + ".";
+                + ", exit code " + exitCodeMarker + ".";
         if (!standardOutput.isBlank()) {
             message += "\nStandard output:\n" + standardOutput;
         }
         if (!errorOutput.isBlank()) {
             message += "\nStandard error:\n" + errorOutput;
         }
-        return redactEnvironmentValues(message);
+        return redactEnvironmentValues(message).replace(exitCodeMarker, Integer.toString(exitCode));
     }
 
     private static String redactEnvironmentValues(String message) {
         String redacted = message;
-        List<String> environmentValues = System.getenv().values().stream()
+        for (String value : environmentValues()) {
+            redacted = redacted.replace(value, "[redacted]");
+        }
+        return redacted;
+    }
+
+    private static List<String> environmentValues() {
+        return System.getenv().values().stream()
                 .filter(value -> value != null && !value.isEmpty())
                 .distinct()
                 .sorted(Comparator.comparingInt(String::length).reversed())
                 .toList();
-        for (String value : environmentValues) {
-                redacted = redacted.replace(value, "[redacted]");
-        }
-        return redacted;
     }
 
     private static boolean isWindowsBatchScript(java.io.File executable) {
@@ -126,11 +140,19 @@ public abstract class ElideExecTask extends DefaultTask {
     /** Limits captured process output so a noisy failed command cannot exhaust the Gradle daemon. */
     private static final class BoundedOutputStream extends OutputStream {
         private final ByteArrayOutputStream delegate = new ByteArrayOutputStream();
+        private final List<byte[]> environmentValueBytes = environmentValues().stream()
+                .map(value -> value.getBytes(StandardCharsets.UTF_8))
+                .sorted(Comparator.comparingInt((byte[] value) -> value.length).reversed())
+                .toList();
+        private final int safeCaptureLimit = MAX_CAPTURED_OUTPUT_BYTES + environmentValueBytes.stream()
+                .mapToInt(value -> value.length)
+                .max()
+                .orElse(0);
         private boolean truncated;
 
         @Override
         public void write(int value) {
-            if (delegate.size() < MAX_CAPTURED_OUTPUT_BYTES) {
+            if (delegate.size() < safeCaptureLimit) {
                 delegate.write(value);
             } else {
                 truncated = true;
@@ -139,7 +161,7 @@ public abstract class ElideExecTask extends DefaultTask {
 
         @Override
         public void write(byte[] bytes, int offset, int length) {
-            int available = MAX_CAPTURED_OUTPUT_BYTES - delegate.size();
+            int available = safeCaptureLimit - delegate.size();
             int capturedLength = Math.min(Math.max(available, 0), length);
             if (capturedLength > 0) {
                 delegate.write(bytes, offset, capturedLength);
@@ -150,8 +172,42 @@ public abstract class ElideExecTask extends DefaultTask {
         }
 
         private String content() {
-            String output = delegate.toString(StandardCharsets.UTF_8);
-            return truncated ? output + "\n[output truncated after " + MAX_CAPTURED_OUTPUT_BYTES + " bytes]" : output;
+            byte[] captured = delegate.toByteArray();
+            int outputLimit = Math.min(captured.length, MAX_CAPTURED_OUTPUT_BYTES);
+            ByteArrayOutputStream redacted = new ByteArrayOutputStream(outputLimit);
+            for (int offset = 0; offset < outputLimit; ) {
+                byte[] value = matchingEnvironmentValue(captured, offset);
+                if (value == null) {
+                    redacted.write(captured[offset]);
+                    offset++;
+                } else {
+                    redacted.writeBytes(REDACTION_MARKER);
+                    offset += value.length;
+                }
+            }
+            String output = redacted.toString(StandardCharsets.UTF_8);
+            return truncated || captured.length > MAX_CAPTURED_OUTPUT_BYTES
+                    ? output + "\n[output truncated after " + MAX_CAPTURED_OUTPUT_BYTES + " bytes]"
+                    : output;
+        }
+
+        private byte[] matchingEnvironmentValue(byte[] captured, int offset) {
+            for (byte[] value : environmentValueBytes) {
+                if (offset + value.length > captured.length) {
+                    continue;
+                }
+                boolean matches = true;
+                for (int index = 0; index < value.length; index++) {
+                    if (captured[offset + index] != value[index]) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (matches) {
+                    return value;
+                }
+            }
+            return null;
         }
     }
 }

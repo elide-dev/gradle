@@ -38,13 +38,14 @@ val elideArch = when (System.getProperty("os.arch").lowercase()) {
     "arm64", "aarch64" -> "arm64"
     else -> error("Unsupported architecture: ${System.getProperty("os.arch")}")
 }
-val elidePlatform = when (System.getProperty("os.name").lowercase()) {
-    "linux" -> "linux-$elideArch"
-    "mac os x" -> "darwin-$elideArch"
-    "windows" -> "windows-$elideArch"
+val elideOsName = System.getProperty("os.name").lowercase()
+val elidePlatform = when {
+    elideOsName == "linux" -> "linux-$elideArch"
+    elideOsName == "mac os x" -> "darwin-$elideArch"
+    elideOsName.startsWith("windows") -> "windows-$elideArch"
     else -> error("Unsupported OS: ${System.getProperty("os.name")}")
 }
-val elideReleasePlatform = when (System.getProperty("os.name").lowercase()) {
+val elideReleasePlatform = when (elideOsName) {
     "mac os x" -> "macos-$elideArch"
     else -> elidePlatform
 }

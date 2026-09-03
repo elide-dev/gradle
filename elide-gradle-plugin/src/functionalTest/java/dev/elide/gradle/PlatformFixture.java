@@ -75,12 +75,15 @@ final class PlatformFixture {
                 > "%%counterFile%%" echo %%count%%
                 set "argsFile=%%logDirectory%%\\%%count%%.args"
                 :record
-                if "%%~1"=="" goto recorded
+                if "%%1"=="" goto recorded
                 >> "%%argsFile%%" echo(%%~1
                 shift
                 goto record
                 :recorded
-                if /I "%%first%%"=="install" > ".dev\\dependencies\\m2\\fixture-install.marker" echo installed
+                if /I "%%first%%"=="install" (
+                  mkdir ".dev\\dependencies\\m2" 2>nul
+                  > ".dev\\dependencies\\m2\\fixture-install.marker" echo installed
+                )
                 exit /b 0
                 """.formatted(counter, logDirectory);
     }
@@ -103,6 +106,7 @@ final class PlatformFixture {
                   printf '%%s\\n' "$argument" >> "$args_file"
                 done
                 if [ "${1-}" = 'install' ]; then
+                  mkdir -p .dev/dependencies/m2
                   printf 'installed\\n' > .dev/dependencies/m2/fixture-install.marker
                 fi
                 """.formatted(counter, logDirectory);

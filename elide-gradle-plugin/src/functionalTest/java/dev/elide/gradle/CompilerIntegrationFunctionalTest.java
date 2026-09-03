@@ -86,6 +86,57 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
+    void redactsAnEnvironmentValueThatCrossesTheCaptureBoundary() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The boundary fixture uses a POSIX fake executable.");
+        String secret = "cross-boundary-secret-value";
+        int capturedPrefixLength = "cross-boundary-secret".length();
+        String padding = "x".repeat((64 * 1024) - capturedPrefixLength);
+        Path projectDirectory = temporaryDirectory.resolve("boundary-project");
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf '%%s%%s' '%s' "$ELIDE_TEST_SECRET"
+                exit 23
+                """.formatted(padding));
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of("ELIDE_TEST_SECRET", secret))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("exit code 23"), result.getOutput());
+        assertFalse(result.getOutput().contains(secret.substring(0, capturedPrefixLength)),
+                "a boundary prefix of the environment value leaked");
+    }
+
+    @Test
+    void reportsAnUnstartableExecutableAsAStructuredRedactedFailure() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The unstartable fixture uses a missing POSIX interpreter.");
+        String secret = "unstartable-executable-secret";
+        Path projectDirectory = temporaryDirectory.resolve("unstartable-" + secret);
+        Path executable = writeExecutable(projectDirectory, """
+                #!/definitely/missing/elide-interpreter
+                """);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of("ELIDE_TEST_SECRET", secret))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("Elide command failed: executable "), result.getOutput());
+        assertTrue(result.getOutput().contains("working directory "), result.getOutput());
+        assertTrue(result.getOutput().contains("exit code -1"), result.getOutput());
+        assertFalse(result.getOutput().contains(secret), result.getOutput());
+    }
+
+    @Test
     @EnabledOnOs(OS.WINDOWS)
     void configuresCompilerWithAWindowsNativeFixtureWithoutExecutingIt() throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("windows-compiler-project");
@@ -166,6 +217,14 @@ class CompilerIntegrationFunctionalTest {
                 printf '%s\\n' "$ELIDE_TEST_SECRET" >&2
                 exit 23
                 """);
+        executable.toFile().setExecutable(true);
+        return executable;
+    }
+
+    private static Path writeExecutable(Path projectDirectory, String contents) throws IOException {
+        Path executable = projectDirectory.resolve("bin/elide");
+        Files.createDirectories(executable.getParent());
+        Files.writeString(executable, contents);
         executable.toFile().setExecutable(true);
         return executable;
     }
