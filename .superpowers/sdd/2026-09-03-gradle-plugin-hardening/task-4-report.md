@@ -124,3 +124,18 @@ git diff --check
 ```
 
 Result: `BUILD SUCCESSFUL in 1s`; downloader unit suite has 4 tests with zero failures/errors; whitespace check exits 0.
+
+## Review fix round 3: direct primary suppression
+
+When a primary download failure existed, the previous cleanup aggregation nested the second cleanup exception under the first before attaching that group to the primary. The primary exception therefore exposed only one direct suppressed cleanup failure.
+
+The primary-failure branch now invokes the independent checksum and archive cleanup attempts with the primary throwable as the aggregation target. Each cleanup failure is consequently attached directly to the primary exception. The no-primary branch retains first-failure rethrow in its original type with later failures nested beneath it.
+
+Verification:
+
+```text
+./gradlew :elide-gradle-plugin:test --tests 'dev.elide.gradle.ElideDownloaderTest'
+git diff --check
+```
+
+Result: `BUILD SUCCESSFUL in 2s`; downloader unit suite has 4 tests with zero failures/errors; whitespace check exits 0.

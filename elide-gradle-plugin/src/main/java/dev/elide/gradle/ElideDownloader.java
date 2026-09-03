@@ -57,11 +57,12 @@ public final class ElideDownloader {
             failure = exception;
             throw exception;
         } finally {
-            Throwable cleanupFailure = deleteTemporaryFiles(checksumTemporary, archiveTemporary);
-            if (cleanupFailure != null) {
-                if (failure != null) {
-                    failure.addSuppressed(cleanupFailure);
-                } else {
+            if (failure != null) {
+                deleteTemporaryFile(checksumTemporary, failure);
+                deleteTemporaryFile(archiveTemporary, failure);
+            } else {
+                Throwable cleanupFailure = deleteTemporaryFiles(checksumTemporary, archiveTemporary);
+                if (cleanupFailure != null) {
                     throwCleanupFailure(cleanupFailure);
                 }
             }
