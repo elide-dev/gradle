@@ -10,4 +10,6 @@ dependencyResolutionManagement {
 include("elide-gradle-plugin")
 include("elide-gradle-catalog")
 
-includeBuild("example-project")
+if (!gradle.startParameter.isWriteDependencyLocks) {
+    includeBuild("example-project")
+}
