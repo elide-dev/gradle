@@ -59,6 +59,12 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     } catch (IOException e) {
                         throw new RuntimeException("Failed to write Elide javac shim", e);
                     }
+                    if (!javaHomeShim.toFile().setExecutable(true)) {
+                        project.getLogger().warn("Elide's javac shim was created at '{}', but could not be made " +
+                                "executable. Falling back to stock javac.", javaHomeShim.toAbsolutePath());
+                        return task;
+                    }
+                    resolvedElide = javaHomeShim;
                 } else {
                     // we can't write the shim, and it's not there, and we need it, so we should warn and fall back.
                     project.getLogger().warn("Elide's javac shim was not found at '{}'; falling back to stock javac.",

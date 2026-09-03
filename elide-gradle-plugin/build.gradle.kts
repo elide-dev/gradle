@@ -36,6 +36,10 @@ val elidePlatform = when (System.getProperty("os.name").lowercase()) {
     "windows" -> "windows-$elideArch"
     else -> error("Unsupported OS: ${System.getProperty("os.name")}")
 }
+val elideReleasePlatform = when (System.getProperty("os.name").lowercase()) {
+    "mac os x" -> "macos-$elideArch"
+    else -> elidePlatform
+}
 
 repositories {
     mavenCentral()
@@ -71,7 +75,7 @@ gradlePlugin.testSourceSets(functionalTest)
 
 configurations[functionalTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
 
-val runtimeHome = layout.buildDirectory.dir("elide-runtime/elide-$elideVersion-$elidePlatform")
+val runtimeHome = layout.buildDirectory.dir("elide-runtime")
 
 val functionalTestTask = tasks.register<Test>("functionalTest") {
     testClassesDirs = functionalTest.output.classesDirs
@@ -79,8 +83,8 @@ val functionalTestTask = tasks.register<Test>("functionalTest") {
 }
 
 val downloadElide by tasks.registering(Download::class) {
-    src("https://elide.zip/cli/v1/snapshot/$elidePlatform/$elideVersion/elide.tgz")
-    dest(layout.buildDirectory.dir("elide-runtime"))
+    src("https://github.com/elide-dev/elide/releases/download/$elideVersion/elide.$elideReleasePlatform.tgz")
+    dest(layout.buildDirectory.file("elide-runtime/elide.tgz"))
     outputs.file(layout.buildDirectory.file("elide-runtime/elide.tgz"))
 }
 
@@ -98,7 +102,7 @@ val prepareElide by tasks.registering {
 }
 
 val checkElide by tasks.registering(Exec::class) {
-    executable = runtimeHome.get().file("elide").asFile.absolutePath
+    executable = runtimeHome.get().file("bin/elide").asFile.absolutePath
     args("--version")
     dependsOn(downloadElide, extractElide, prepareElide)
 }
