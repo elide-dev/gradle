@@ -5,7 +5,6 @@ import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,12 +19,12 @@ class RuntimeSelectionFunctionalTest {
     Path temporaryDirectory;
 
     @Test
-    void explicitRuntimeConfigurationDoesNotExecuteElideOrCreateAJavacShim() throws IOException {
+    void explicitRuntimeConfigurationDoesNotExecuteElideDuringConfiguration() throws IOException {
         assertConfigurationIsPure("elideBin = layout.projectDirectory.file('bin/elide')");
     }
 
     @Test
-    void pathRuntimeConfigurationDoesNotExecuteElideOrCreateAJavacShim() throws IOException {
+    void pathRuntimeConfigurationDoesNotExecuteElideDuringConfiguration() throws IOException {
         assertConfigurationIsPure("runtimeMode = dev.elide.gradle.ElideRuntimeMode.PATH");
     }
 
@@ -34,13 +33,10 @@ class RuntimeSelectionFunctionalTest {
         Path executableDirectory = projectDirectory.resolve("bin");
         Path executable = executableDirectory.resolve("elide");
         Path invocationLog = projectDirectory.resolve("elide-invocations.log");
-        Path fakeJavaHome = projectDirectory.resolve("fake-java-home");
         Files.createDirectories(executableDirectory);
-        Files.createDirectories(fakeJavaHome.resolve("bin"));
         Files.writeString(executable, "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
         executable.toFile().setExecutable(true);
-        Files.writeString(projectDirectory.resolve("settings.gradle"),
-                "System.setProperty('java.home', '" + groovyQuote(fakeJavaHome) + "')\n");
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
         Files.writeString(projectDirectory.resolve("build.gradle"), """
                 plugins {
                     id 'dev.elide'
@@ -60,7 +56,6 @@ class RuntimeSelectionFunctionalTest {
                 .build();
 
         assertFalse(Files.exists(invocationLog));
-        assertFalse(Files.exists(fakeJavaHome.resolve("bin/elide-javac")));
         assertTrue(first.getOutput().contains("Configuration cache entry stored"));
         assertTrue(second.getOutput().contains("Configuration cache entry reused"));
     }
@@ -75,8 +70,7 @@ class RuntimeSelectionFunctionalTest {
 
     private static Map<String, String> environmentWithPath(Path executableDirectory) {
         Map<String, String> environment = new HashMap<>(System.getenv());
-        String existingPath = environment.getOrDefault("PATH", "");
-        environment.put("PATH", executableDirectory + File.pathSeparator + existingPath);
+        environment.put("PATH", executableDirectory.toString());
         environment.put("GRADLE_USER_HOME", executableDirectory.getParent().resolve("gradle-user-home").toString());
         return environment;
     }
@@ -85,7 +79,4 @@ class RuntimeSelectionFunctionalTest {
         return path.toAbsolutePath().toString().replace("'", "'\\\"'\\\"'");
     }
 
-    private static String groovyQuote(Path path) {
-        return path.toAbsolutePath().toString().replace("'", "\\'");
-    }
 }

@@ -115,7 +115,7 @@ val prepareElide by tasks.registering {
     dependsOn(downloadElide, extractElide)
 }
 
-val checkElide by tasks.registering(Exec::class) {
+val realRuntimeSmoke by tasks.registering(Exec::class) {
     executable = runtimeHome.get().file("bin/elide").asFile.absolutePath
     args("--version")
     dependsOn(downloadElide, extractElide, prepareElide)

@@ -3,11 +3,9 @@ package dev.elide.gradle;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
-import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.JavaCompile;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -79,18 +77,10 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     task.getElideExecutable().set(resolution.executable());
                     task.getElideArguments().set(List.of("install"));
                     task.getWorkingDirectory().set(project.getLayout().getProjectDirectory());
-                    task.getInputs().file(extension.getManifest())
-                            .withPropertyName("manifest")
-                            .withPathSensitivity(PathSensitivity.RELATIVE)
-                            .optional();
-                    task.getInputs().dir(extension.getDevRoot())
-                            .withPropertyName("devRoot")
-                            .withPathSensitivity(PathSensitivity.RELATIVE)
-                            .optional();
-                    task.getOutputs().file(extension.resolveLockfilePath())
-                            .withPropertyName("lockfile");
-                    task.getOutputs().dir(extension.getDevRoot().dir("dependencies/m2"))
-                            .withPropertyName("dependencyRepository");
+                    task.getManifest().set(extension.getManifest());
+                    task.getDevRoot().set(extension.getDevRoot());
+                    task.getLockfile().set(extension.resolveLockfilePath());
+                    task.getGeneratedDependencyRepository().set(extension.getDevRoot().dir("dependencies/m2"));
                     addManagedPreparationDependency(task, resolution);
                 });
     }
@@ -104,7 +94,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
     private void installMavenDepsSupport(Project project, ElideExtension extension) {
         project.getRepositories().maven(repository -> {
             repository.setName("elide");
-            repository.setUrl(URI.create("file://" + extension.resolveLocalDepsPath().toAbsolutePath()));
+            repository.setUrl(extension.resolveLocalDepsPath().toUri());
         });
     }
 

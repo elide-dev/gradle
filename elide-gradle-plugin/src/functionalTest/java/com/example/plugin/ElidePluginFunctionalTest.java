@@ -3,44 +3,48 @@ package com.example.plugin;
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.Writer;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ElidePluginFunctionalTest {
+    @TempDir
+    Path temporaryDirectory;
+
     @Test
-    void canRunTasks() throws IOException {
-        File projectDir = new File("build/functionalTest");
-        Files.createDirectories(projectDir.toPath());
-        writeString(new File(projectDir, "settings.gradle"), "");
-        writeString(new File(projectDir, "build.gradle"),
+    void canRunTasksWithAnExplicitFakeRuntime() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("project");
+        Path executable = projectDirectory.resolve("bin/elide");
+        Files.createDirectories(executable.getParent());
+        Files.writeString(executable, "#!/bin/sh\nexit 0\n");
+        executable.toFile().setExecutable(true);
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"),
                 """
                     plugins {
                       id('dev.elide')
                     }
+
+                    elide {
+                      getElideBin().set(layout.projectDirectory.file('bin/elide'))
+                      getEnableJavaCompiler().set(false)
+                    }
                     """);
 
-        BuildResult result = configuredRunner(projectDir, "tasks").build();
+        BuildResult result = configuredRunner(projectDirectory, "tasks").build();
 
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"));
     }
 
-    private void writeString(File file, String string) throws IOException {
-        try (Writer writer = new FileWriter(file)) {
-            writer.write(string);
-        }
-    }
-
-    private GradleRunner configuredRunner(File projectDir, String... arguments) {
+    private GradleRunner configuredRunner(Path projectDirectory, String... arguments) {
         return GradleRunner.create()
-                .forwardOutput()
                 .withPluginClasspath()
                 .withArguments(arguments)
-                .withProjectDir(projectDir);
+                .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile());
     }
 }
