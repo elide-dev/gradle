@@ -95,3 +95,17 @@ Result: exit 0.
 
 - The repository continues to emit pre-existing Gradle 9.7 Kotlin DSL deprecation and native-access/JDK-installation warnings. They did not produce test failures.
 - Gradle 7.6.4 API compatibility was maintained by using public `ArchiveOperations`, `FileSystemOperations`, `Property`, task I/O annotations, and Java 17 APIs; the separate consumer-matrix execution remains Task 6 scope.
+
+## Review fix: temporary-download cleanup
+
+Review identified that the original downloader created both temporary paths before entering its `try`/`finally`, so a failure creating the archive temporary could leak the already-created checksum temporary. Its linear `finally` also skipped archive cleanup when checksum cleanup failed.
+
+`downloadVerified` now initializes both paths within a guarded `try`, tracks the primary failure, and uses independent cleanup attempts for both paths. Cleanup errors are suppressed onto the primary failure; where no primary operation failed, the first cleanup error is thrown with later cleanup errors suppressed beneath it. This is intentionally local to the downloader and does not add a filesystem abstraction solely for a failure mode that JDK static filesystem calls cannot deterministically inject in the existing test design.
+
+Focused verification:
+
+```text
+./gradlew :elide-gradle-plugin:test --tests 'dev.elide.gradle.ElideDownloaderTest'
+```
+
+Result: `BUILD SUCCESSFUL in 1s`, 4 tests, zero failures/errors. Existing mismatch coverage continues to prove that failed verification preserves the target and leaves no temporary download files.

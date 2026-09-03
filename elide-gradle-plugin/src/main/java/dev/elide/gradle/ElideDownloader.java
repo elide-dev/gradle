@@ -34,9 +34,12 @@ public final class ElideDownloader {
         Path parent = absoluteTarget.getParent();
         Files.createDirectories(parent);
         String prefix = absoluteTarget.getFileName().toString() + ".";
-        Path checksumTemporary = Files.createTempFile(parent, prefix, ".sha256.tmp");
-        Path archiveTemporary = Files.createTempFile(parent, prefix, ".archive.tmp");
+        Path checksumTemporary = null;
+        Path archiveTemporary = null;
+        Throwable failure = null;
         try {
+            checksumTemporary = Files.createTempFile(parent, prefix, ".sha256.tmp");
+            archiveTemporary = Files.createTempFile(parent, prefix, ".archive.tmp");
             download(release.checksumUri(), checksumTemporary);
             String expected = parseSha256(Files.readString(checksumTemporary, StandardCharsets.UTF_8));
             download(release.archiveUri(), archiveTemporary);
@@ -47,10 +50,42 @@ public final class ElideDownloader {
                 throw new IOException("SHA-256 mismatch for Elide archive " + release.archiveUri());
             }
             Files.move(archiveTemporary, absoluteTarget, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | InterruptedException exception) {
+            failure = exception;
+            throw exception;
+        } catch (RuntimeException | Error exception) {
+            failure = exception;
+            throw exception;
         } finally {
-            Files.deleteIfExists(checksumTemporary);
-            Files.deleteIfExists(archiveTemporary);
+            IOException cleanupFailure = deleteTemporaryFiles(checksumTemporary, archiveTemporary);
+            if (cleanupFailure != null) {
+                if (failure != null) {
+                    failure.addSuppressed(cleanupFailure);
+                } else {
+                    throw cleanupFailure;
+                }
+            }
         }
+    }
+
+    private static IOException deleteTemporaryFiles(Path checksumTemporary, Path archiveTemporary) {
+        IOException failure = deleteTemporaryFile(checksumTemporary, null);
+        return deleteTemporaryFile(archiveTemporary, failure);
+    }
+
+    private static IOException deleteTemporaryFile(Path temporary, IOException failure) {
+        if (temporary == null) {
+            return failure;
+        }
+        try {
+            Files.deleteIfExists(temporary);
+        } catch (IOException exception) {
+            if (failure == null) {
+                return exception;
+            }
+            failure.addSuppressed(exception);
+        }
+        return failure;
     }
 
     public static String parseSha256(String checksumFile) {
