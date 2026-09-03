@@ -121,16 +121,6 @@ val checkElide by tasks.registering(Exec::class) {
     dependsOn(downloadElide, extractElide, prepareElide)
 }
 
-listOf(
-    tasks.build,
-    tasks.test,
-    tasks.check,
-).forEach {
-    it.configure {
-        dependsOn(downloadElide, extractElide, prepareElide, checkElide)
-    }
-}
-
 tasks.check {
     dependsOn(functionalTestTask)
 }

@@ -3,8 +3,10 @@ package dev.elide.gradle;
 import org.gradle.api.Project;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.tasks.TaskProvider;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -13,6 +15,9 @@ import java.util.regex.Pattern;
 
 /** Resolves Elide runtime inputs using Gradle-managed providers without starting a process. */
 public final class ElideRuntimeResolver {
+    private static final URI DEFAULT_RELEASE_BASE_URI =
+            URI.create("https://github.com/elide-dev/elide/releases/download");
+    static final String TEST_RELEASE_BASE_URI_PROPERTY = "dev.elide.gradle.test.releaseBaseUri";
     private ElideRuntimeResolver() {
     }
 
@@ -35,7 +40,11 @@ public final class ElideRuntimeResolver {
         Provider<RegularFile> executable = project.getLayout().file(
                 project.provider(() -> selection.executable().toFile()));
 
-        return new ElideRuntimeResolution(executable, selection.source(), Optional.empty());
+        Optional<TaskProvider<? extends org.gradle.api.Task>> preparationTask = selection.source()
+                == ElideRuntimeSource.MANAGED
+                ? Optional.of(registerManagedPreparation(project, extension, platform))
+                : Optional.empty();
+        return new ElideRuntimeResolution(executable, selection.source(), preparationTask);
     }
 
     @SuppressWarnings("deprecation")
@@ -65,5 +74,27 @@ public final class ElideRuntimeResolver {
                 .resolve(platform.key())
                 .resolve("bin")
                 .resolve(platform.executableName());
+    }
+
+    private static TaskProvider<PrepareElideRuntimeTask> registerManagedPreparation(
+            Project project, ElideExtension extension, ElidePlatform platform) {
+        Path runtimeDirectory = managedExecutable(project, extension, platform).getParent().getParent();
+        return project.getTasks().register("prepareElideRuntime", PrepareElideRuntimeTask.class, task -> {
+            task.setGroup("Elide");
+            task.setDescription("Downloads and verifies the managed Elide runtime.");
+            task.getRuntimeVersion().set(extension.getRuntimeVersion());
+            task.getPlatformOs().set(platform.os());
+            task.getPlatformArch().set(platform.arch());
+            task.getArchiveExtension().set(platform.archiveExtension());
+            task.getExecutableName().set(platform.executableName());
+            task.getReleaseBaseUri().set(releaseBaseUri(project).toString());
+            task.getOffline().set(project.getGradle().getStartParameter().isOffline());
+            task.getRuntimeDirectory().set(project.getLayout().dir(project.provider(() -> runtimeDirectory.toFile())));
+        });
+    }
+
+    static URI releaseBaseUri(Project project) {
+        return URI.create(project.getProviders().systemProperty(TEST_RELEASE_BASE_URI_PROPERTY)
+                .getOrElse(DEFAULT_RELEASE_BASE_URI.toString()));
     }
 }
