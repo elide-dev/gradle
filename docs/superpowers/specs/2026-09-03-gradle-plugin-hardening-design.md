@@ -18,7 +18,7 @@ Linux, macOS, and Windows are first-class platforms. The build verifies the plug
 
 ## Build Tooling
 
-The wrapper moves to Gradle 9.7.1 and records the official distribution SHA-256. Build plugins and test libraries move to their latest stable compatible versions, including Plugin Publish 2.1.1, Gradle Download Task 5.7.0, and JUnit 6.1.2.
+The wrapper moves to Gradle 9.7.1 and records the official distribution SHA-256. Build plugins and test libraries move to their latest stable compatible versions, including Plugin Publish 2.1.1, Gradle Download Task 5.7.0, and JUnit 6.1.3.
 
 Dependency and plugin versions live in a Gradle version catalog. Dependency locking covers resolvable build configurations. Repository policy rejects unexpected project-level repositories. The build continues to publish the Gradle plugin and Elide catalog, and includes a local publication smoke test.
 
