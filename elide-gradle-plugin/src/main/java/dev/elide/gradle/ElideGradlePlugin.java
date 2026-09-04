@@ -9,7 +9,6 @@ import org.gradle.api.tasks.compile.JavaCompile;
 
 import java.io.File;
 import java.net.URISyntaxException;
-import java.nio.file.Path;
 import java.util.List;
 
 /** Gradle integration for Elide runtime selection, compilation, and dependency installation. */
@@ -32,6 +31,8 @@ public class ElideGradlePlugin implements Plugin<Project> {
         ElideExtension extension = project.getExtensions().create(
                 ELIDE_EXTENSION_NAME, ElideExtension.class, project, buildConfiguration);
         ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension);
+        ElideFormatting.configure(project, resolution);
+        ElideDependencies.configure(project);
         resolution.preparationTask().configure(task -> task.usesService(buildConfiguration));
         Provider<Boolean> mavenInstallerEnabled = mavenInstallerEnabled(project, extension);
         Provider<Boolean> installEnabled = extension.getEnableInstall()
@@ -40,6 +41,10 @@ public class ElideGradlePlugin implements Plugin<Project> {
                 project, extension, resolution, installEnabled);
 
         project.afterEvaluate(ignored -> {
+            if (extension.getDependencyMode().get() == ElideDependencyMode.GRADLE
+                    && (extension.getEnableInstall().get() || mavenInstallerEnabled.get())) {
+                throw new org.gradle.api.GradleException("dependencyMode GRADLE requires install = false; declare JVM dependencies in Gradle and use its locking and verification.");
+            }
             if (mavenInstallerEnabled.get()) {
                 installMavenDepsSupport(project, extension);
             }
@@ -49,19 +54,32 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     if (!enableJavaCompiler(project, extension)) {
                         return;
                     }
-                    configureJavaCompileToUseElide(task, resolution);
+                    configureJavaCompileToUseElide(task, resolution, extension);
                     addManagedPreparationDependency(task, resolution);
                     task.dependsOn(installTask);
                 }));
     }
 
-    private void configureJavaCompileToUseElide(JavaCompile task, ElideRuntimeResolution resolution) {
+    private void configureJavaCompileToUseElide(JavaCompile task, ElideRuntimeResolution resolution, ElideExtension extension) {
         var options = task.getOptions();
         options.setFork(true);
-        options.getForkOptions().setExecutable(javaExecutable().toString());
         ElideCompilerArgumentProvider arguments = task.getProject().getObjects()
                 .newInstance(ElideCompilerArgumentProvider.class);
         arguments.getElideExecutable().set(resolution.executable());
+        ElideTaskInputs.runtime(task, resolution);
+        task.getInputs().property("elide.launcherJavaVersion", System.getProperty("java.runtime.version"));
+        task.getInputs().property("elide.runtimeVersion", extension.getRuntimeVersion());
+        for (String name : List.of("CLASSPATH", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS")) {
+            task.getInputs().property("elide.environment." + name,
+                    task.getProject().getProviders().environmentVariable(name).orElse(""));
+        }
+        arguments.getPersistentCompiler().set(extension.getPersistentCompiler());
+        arguments.getDependencyMode().set(extension.getDependencyMode());
+        var compilerService = task.getProject().getGradle().getSharedServices().registerIfAbsent(
+                "elideCompiler", ElideCompilerService.class, ignored -> {});
+        arguments.getCompilerService().set(compilerService);
+        arguments.getWorkerClasspath().from(task.getClasspath());
+        task.usesService(compilerService);
         arguments.getLauncherClasspath().from(compilerLauncherFile());
         arguments.getForwardedJvmArguments().set(task.getProject().provider(() -> {
             List<String> configured = options.getForkOptions().getJvmArgs();
@@ -71,14 +89,16 @@ public class ElideGradlePlugin implements Plugin<Project> {
         task.doFirst(ignored -> {
             arguments.getForwardedJvmArguments().finalizeValue();
             options.getForkOptions().setJvmArgs(List.of());
+            // The executable override is execution machinery. Compiler identity is fingerprinted
+            // by ElideCompilerArgumentProvider; keeping this unset during snapshotting avoids
+            // Gradle's blanket cache exclusion for otherwise untracked custom compilers.
+            var compiler = task.getJavaCompiler().getOrNull();
+            File home = compiler == null ? new File(System.getProperty("java.home"))
+                    : compiler.getMetadata().getInstallationPath().getAsFile();
+            options.getForkOptions().setExecutable(new File(home, "bin/" +
+                    (System.getProperty("os.name").toLowerCase().startsWith("windows")
+                            ? "java.exe" : "java")).getAbsolutePath());
         });
-    }
-
-    private static Path javaExecutable() {
-        String executableName = System.getProperty("os.name").toLowerCase().startsWith("windows")
-                ? "java.exe"
-                : "java";
-        return Path.of(System.getProperty("java.home"), "bin", executableName);
     }
 
     private static File compilerLauncherFile() {
