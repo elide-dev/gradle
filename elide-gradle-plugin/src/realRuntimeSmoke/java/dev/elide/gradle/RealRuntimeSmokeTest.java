@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RealRuntimeSmokeTest {
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @Test
@@ -35,6 +35,7 @@ class RealRuntimeSmokeTest {
         BuildResult result = GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(gradleUserHome))
                 .withArguments("--gradle-user-home", gradleUserHome.toString(),
                         "clean", "run", "-Pelide.runtime.mode=" + runtimeMode, "--stacktrace")

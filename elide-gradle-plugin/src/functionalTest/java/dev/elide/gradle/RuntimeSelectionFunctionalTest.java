@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuntimeSelectionFunctionalTest {
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @Test
@@ -71,6 +71,7 @@ class RuntimeSelectionFunctionalTest {
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(environment);
     }
 

@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ElidePluginFunctionalTest {
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @Test
@@ -44,6 +44,7 @@ public class ElidePluginFunctionalTest {
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withArguments(arguments)
-                .withProjectDir(projectDirectory.toFile());
+                .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile());
     }
 }

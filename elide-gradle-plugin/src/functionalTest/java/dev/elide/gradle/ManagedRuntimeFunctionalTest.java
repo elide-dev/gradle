@@ -6,7 +6,6 @@ import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
-import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
@@ -33,18 +32,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ManagedRuntimeFunctionalTest {
     private static final String VERSION = "fixture-1.0";
 
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
-
-    // TestKit daemons can retain Windows locks in an explicitly selected Gradle user home.
-    @TempDir(cleanup = CleanupMode.NEVER)
-    Path retainedGradleUserHomes;
 
     @Test
     void downloadsVerifiesExtractsAndReusesTheManagedRuntime() throws Exception {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("project");
-        Path gradleUserHome = retainedGradleUserHomes.resolve("gradle-user-home");
+        Path gradleUserHome = temporaryDirectory.resolve("gradle-user-home");
         Path invocationLog = temporaryDirectory.resolve("invocations.log");
         byte[] archive = fixtureArchive(platform, invocationLog);
         try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
@@ -92,7 +87,7 @@ class ManagedRuntimeFunctionalTest {
     void rejectsAnArchiveWithABadChecksumWithoutCompletingTheCacheEntry() throws Exception {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("bad-checksum-project");
-        Path gradleUserHome = retainedGradleUserHomes.resolve("bad-checksum-gradle-user-home");
+        Path gradleUserHome = temporaryDirectory.resolve("bad-checksum-gradle-user-home");
         byte[] archive = fixtureArchive(platform, temporaryDirectory.resolve("unused.log"));
         try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive,
                 "0000000000000000000000000000000000000000000000000000000000000000")) {
@@ -113,7 +108,7 @@ class ManagedRuntimeFunctionalTest {
     void offlineModeUsesACompletedCacheEntryWithoutSendingARequest() throws Exception {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("offline-hit-project");
-        Path gradleUserHome = retainedGradleUserHomes.resolve("offline-hit-gradle-user-home");
+        Path gradleUserHome = temporaryDirectory.resolve("offline-hit-gradle-user-home");
         byte[] archive = fixtureArchive(platform, temporaryDirectory.resolve("offline-hit.log"));
         try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
             writeProject(projectDirectory, gradleUserHome, platform, temporaryDirectory.resolve("offline-hit.log"));
@@ -137,7 +132,7 @@ class ManagedRuntimeFunctionalTest {
     void repairsLostUnixExecutablePermissionOnACompletedCacheHit() throws Exception {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("permission-repair-project");
-        Path gradleUserHome = retainedGradleUserHomes.resolve("permission-repair-gradle-user-home");
+        Path gradleUserHome = temporaryDirectory.resolve("permission-repair-gradle-user-home");
         byte[] archive = fixtureArchive(platform, temporaryDirectory.resolve("permission-repair.log"));
         try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
             writeProject(projectDirectory, gradleUserHome, platform, temporaryDirectory.resolve("permission-repair.log"));
@@ -171,7 +166,7 @@ class ManagedRuntimeFunctionalTest {
     void offlineModeNamesTheExactVersionAndCachePathWhenTheRuntimeIsMissing() throws IOException {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("offline-miss-project");
-        Path gradleUserHome = retainedGradleUserHomes.resolve("offline-miss-gradle-user-home");
+        Path gradleUserHome = temporaryDirectory.resolve("offline-miss-gradle-user-home");
         writeProject(projectDirectory, gradleUserHome, platform, temporaryDirectory.resolve("offline-miss.log"));
 
         BuildResult result = runner(projectDirectory, gradleUserHome)
@@ -179,7 +174,7 @@ class ManagedRuntimeFunctionalTest {
                         "verifyManagedRuntime", "-Ddev.elide.gradle.test.releaseBaseUri=http://127.0.0.1:1/releases")
                 .buildAndFail();
 
-        Path expectedCachePath = runtimeDirectory(retainedGradleUserHomes.toRealPath()
+        Path expectedCachePath = runtimeDirectory(temporaryDirectory.toRealPath()
                 .resolve("offline-miss-gradle-user-home"), platform);
         assertTrue(result.getOutput().contains("Elide runtime version " + VERSION
                         + " is not cached at " + expectedCachePath),
@@ -222,6 +217,7 @@ class ManagedRuntimeFunctionalTest {
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(environment);
     }
 

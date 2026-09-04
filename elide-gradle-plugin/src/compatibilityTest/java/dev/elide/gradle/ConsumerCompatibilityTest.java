@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConsumerCompatibilityTest {
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @ParameterizedTest(name = "Gradle {0}")
@@ -35,6 +35,7 @@ class ConsumerCompatibilityTest {
                 .withGradleVersion(gradleVersion)
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory))
                 .withArguments("help", "compileJava", "--stacktrace")
                 .build();
@@ -57,6 +58,7 @@ class ConsumerCompatibilityTest {
                 .withGradleVersion("7.6.4")
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory))
                 .withArguments("help", "compileJava", "--stacktrace")
                 .build();

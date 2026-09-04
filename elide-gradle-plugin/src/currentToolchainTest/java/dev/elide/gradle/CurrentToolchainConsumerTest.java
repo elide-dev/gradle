@@ -21,7 +21,7 @@ class CurrentToolchainConsumerTest {
             "24", "8.14.5",
             "26", "9.7.1");
 
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @Test
@@ -44,6 +44,7 @@ class CurrentToolchainConsumerTest {
                 .withGradleVersion(expectedGradleVersion)
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory, testJavaHome))
                 .withArguments("--stacktrace", "help", "compileJava", "assertNestedToolchain")
                 .build();

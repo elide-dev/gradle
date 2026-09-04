@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompilerIntegrationFunctionalTest {
     private static final String SECRET = "not-for-build-output";
 
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @Test
@@ -344,6 +344,7 @@ class CompilerIntegrationFunctionalTest {
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(environment);
     }
 
