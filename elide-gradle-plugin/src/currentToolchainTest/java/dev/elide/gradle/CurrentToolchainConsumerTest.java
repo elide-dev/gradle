@@ -44,7 +44,6 @@ class CurrentToolchainConsumerTest {
                 .withGradleVersion(expectedGradleVersion)
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory, testJavaHome))
                 .withArguments("--stacktrace", "help", "compileJava", "assertNestedToolchain")
                 .build();

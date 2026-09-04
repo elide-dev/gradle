@@ -35,7 +35,6 @@ class ConsumerCompatibilityTest {
                 .withGradleVersion(gradleVersion)
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory))
                 .withArguments("help", "compileJava", "--stacktrace")
                 .build();
@@ -58,7 +57,6 @@ class ConsumerCompatibilityTest {
                 .withGradleVersion("7.6.4")
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory))
                 .withArguments("help", "compileJava", "--stacktrace")
                 .build();

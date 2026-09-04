@@ -44,7 +44,6 @@ public class ElidePluginFunctionalTest {
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withArguments(arguments)
-                .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile());
+                .withProjectDir(projectDirectory.toFile());
     }
 }

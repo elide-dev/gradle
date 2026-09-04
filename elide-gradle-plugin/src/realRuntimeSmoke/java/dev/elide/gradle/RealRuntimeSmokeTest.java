@@ -35,7 +35,6 @@ class RealRuntimeSmokeTest {
         BuildResult result = GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(gradleUserHome))
                 .withArguments("--gradle-user-home", gradleUserHome.toString(),
                         "clean", "run", "-Pelide.runtime.mode=" + runtimeMode, "--stacktrace")

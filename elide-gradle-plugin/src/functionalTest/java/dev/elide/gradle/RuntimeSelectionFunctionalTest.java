@@ -68,7 +68,6 @@ class RuntimeSelectionFunctionalTest {
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(environment);
     }
 
