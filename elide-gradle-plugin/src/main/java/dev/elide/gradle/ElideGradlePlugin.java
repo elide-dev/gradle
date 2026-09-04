@@ -64,6 +64,10 @@ public class ElideGradlePlugin implements Plugin<Project> {
         arguments.getElideExecutable().set(resolution.executable());
         arguments.getRuntimeSource().set(resolution.source());
         arguments.getLauncherClasspath().from(compilerLauncherFile());
+        arguments.getForwardedJvmArguments().set(task.getProject().provider(() -> {
+            List<String> configured = options.getForkOptions().getJvmArgs();
+            return configured == null ? List.of() : List.copyOf(configured);
+        }));
         options.getForkOptions().getJvmArgumentProviders().add(arguments);
     }
 
