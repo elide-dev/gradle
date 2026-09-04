@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsPluginFunctionalTest {
-    @TempDir
+    @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
 
     @Test
@@ -264,7 +264,7 @@ class SettingsPluginFunctionalTest {
         Files.writeString(projectDirectory.resolve("two/build.gradle.kts"), projectBuild);
 
         BuildResult result = configuredRunner(projectDirectory)
-                .withArguments(":one:tasks", ":two:tasks", "--isolated-projects", "--stacktrace")
+                .withArguments("-Dorg.gradle.unsafe.isolated-projects=true", ":one:tasks", ":two:tasks", "--stacktrace")
                 .build();
 
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
@@ -273,7 +273,8 @@ class SettingsPluginFunctionalTest {
     private GradleRunner configuredRunner(Path projectDirectory) {
         return GradleRunner.create()
                 .withPluginClasspath()
-                .withProjectDir(projectDirectory.toFile());
+                .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile());
     }
 
     private void assertAbsentManagedVersionFails(String mode) throws IOException {
