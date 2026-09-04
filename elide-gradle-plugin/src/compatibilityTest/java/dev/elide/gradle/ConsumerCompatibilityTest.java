@@ -39,7 +39,9 @@ class ConsumerCompatibilityTest {
                 .withProjectDir(projectDirectory.toFile())
                 .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(projectDirectory))
-                .withArguments("help", "compileJava", "--stacktrace")
+                .withArguments(
+                        "-Ddev.elide.gradle.test.windowsCmdFixture=true",
+                        "help", "compileJava", "--stacktrace")
                 .build();
 
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());

@@ -4,9 +4,13 @@ name: "Job - Build"
   workflow_call: {}
   workflow_dispatch: {}
 
+concurrency:
+  group: "build-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
-  build:
-    name: "Build (${{ matrix.os }}, Java ${{ matrix.java }}, Gradle ${{ matrix.consumer-gradle }})"
+  build-wrapper:
+    name: "Build (${{ matrix.os }}, Java 17, wrapper)"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -15,20 +19,48 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            java: "17"
-            consumer-gradle: "7.6.4"
+            gradle-command: ./gradlew
           - os: macos-latest
-            java: "17"
-            consumer-gradle: "7.6.4"
+            gradle-command: ./gradlew
           - os: windows-latest
-            java: "17"
-            consumer-gradle: "7.6.4"
-          - os: ubuntu-latest
-            java: "24"
-            consumer-gradle: "8.14.5"
-          - os: ubuntu-latest
-            java: "26"
-            consumer-gradle: "9.7.1"
+            gradle-command: ./gradlew.bat
+    steps:
+      - name: "Setup: Harden Runner"
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with:
+          disable-sudo: true
+          egress-policy: audit
+      - name: "Setup: Checkout"
+        uses: actions/checkout@23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: "Setup: Java 17"
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: "Setup: Gradle"
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: "Build: Projects"
+        working-directory: .
+        run: ${{ matrix.gradle-command }} --stacktrace --info --no-daemon build compatibilityTest
+
+  build-current-toolchain:
+    name: "Build (Ubuntu, Java ${{ matrix.java }}, Gradle ${{ matrix.gradle-version }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - java: "24"
+            gradle-version: "8.14.5"
+          - java: "26"
+            gradle-version: "9.7.1"
     steps:
       - name: "Setup: Harden Runner"
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
@@ -45,10 +77,11 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
-      - name: "Setup: Gradle"
+      - name: "Setup: Gradle ${{ matrix.gradle-version }}"
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
         with:
+          gradle-version: ${{ matrix.gradle-version }}
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: "Build: Projects"
         working-directory: .
-        run: ./gradlew --stacktrace --info --no-daemon build compatibilityTest
+        run: gradle --stacktrace --info --no-daemon build compatibilityTest

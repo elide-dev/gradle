@@ -8,6 +8,10 @@ name: "Scheduled Runtime Smoke"
 permissions:
   contents: read
 
+concurrency:
+  group: "scheduled-runtime-smoke"
+  cancel-in-progress: false
+
 jobs:
   real-runtime-smoke:
     name: "Managed runtime smoke (${{ matrix.os }})"
@@ -15,10 +19,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
+        include:
+          - os: ubuntu-latest
+            gradle-command: ./gradlew
+          - os: macos-latest
+            gradle-command: ./gradlew
+          - os: windows-latest
+            gradle-command: ./gradlew.bat
     steps:
       - name: "Setup: Harden Runner"
         uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
@@ -26,6 +33,7 @@ jobs:
           disable-sudo: true
           egress-policy: block
           allowed-endpoints: >
+            services.gradle.org:443
             elide.zip:443
             github.com:443
             release-assets.githubusercontent.com:443
@@ -44,4 +52,4 @@ jobs:
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
       - name: "Smoke: Managed runtime"
         working-directory: .
-        run: ./gradlew realRuntimeSmoke -Pelide.runtime.mode=MANAGED
+        run: ${{ matrix.gradle-command }} realRuntimeSmoke -Pelide.runtime.mode=MANAGED

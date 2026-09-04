@@ -1,11 +1,8 @@
-import de.undercouch.gradle.tasks.download.Download
-
 plugins {
     `java-gradle-plugin`
     `maven-publish`
     signing
     alias(libs.plugins.plugin.publish)
-    alias(libs.plugins.download.task)
 }
 
 java {
@@ -33,32 +30,7 @@ publishing {
     }
 }
 
-val elideArch = when (System.getProperty("os.arch").lowercase()) {
-    "x86_64", "amd64" -> "amd64"
-    "arm64", "aarch64" -> "arm64"
-    else -> error("Unsupported architecture: ${System.getProperty("os.arch")}")
-}
-val elideOsName = System.getProperty("os.name").lowercase()
-val elidePlatform = when {
-    elideOsName == "linux" -> "linux-$elideArch"
-    elideOsName == "mac os x" -> "darwin-$elideArch"
-    elideOsName.startsWith("windows") -> "windows-$elideArch"
-    else -> error("Unsupported OS: ${System.getProperty("os.name")}")
-}
-val elideReleasePlatform = when (elideOsName) {
-    "mac os x" -> "macos-$elideArch"
-    else -> elidePlatform
-}
-val elideArchiveExtension = if (elidePlatform.startsWith("windows-")) "zip" else "tgz"
-val elideExecutableName = if (elidePlatform.startsWith("windows-")) "elide.exe" else "elide"
-
-val elideRuntime: Configuration by configurations.creating {
-    isCanBeResolved = true
-}
-
 dependencies {
-    elideRuntime(files(zipTree(rootProject.layout.buildDirectory.dir("elide-runtime"))))
-
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -92,19 +64,24 @@ configurations[functionalTest.implementationConfigurationName].extendsFrom(confi
 configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
 
 val compatibilityTest: SourceSet by sourceSets.creating
-gradlePlugin.testSourceSets(functionalTest, compatibilityTest)
+val realRuntimeSmokeSourceSet = sourceSets.create("realRuntimeSmoke")
+gradlePlugin.testSourceSets(functionalTest, compatibilityTest, realRuntimeSmokeSourceSet)
 
 configurations[compatibilityTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
 configurations[compatibilityTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
 compatibilityTest.compileClasspath += functionalTest.output
 compatibilityTest.runtimeClasspath += functionalTest.output
 
+configurations[realRuntimeSmokeSourceSet.implementationConfigurationName]
+    .extendsFrom(configurations.testImplementation.get())
+configurations[realRuntimeSmokeSourceSet.runtimeOnlyConfigurationName]
+    .extendsFrom(configurations.testRuntimeOnly.get())
+
 dependencies {
     add(functionalTest.implementationConfigurationName, gradleTestKit())
     add(compatibilityTest.implementationConfigurationName, gradleTestKit())
+    add(realRuntimeSmokeSourceSet.implementationConfigurationName, gradleTestKit())
 }
-
-val runtimeHome = layout.buildDirectory.dir("elide-runtime")
 
 val functionalTestTask = tasks.register<Test>("functionalTest") {
     testClassesDirs = functionalTest.output.classesDirs
@@ -121,30 +98,28 @@ val compatibilityTestTask = tasks.register<Test>("compatibilityTest") {
     })
 }
 
-val downloadElide by tasks.registering(Download::class) {
-    src("https://github.com/elide-dev/elide/releases/download/$elideVersion/elide.$elideReleasePlatform.$elideArchiveExtension")
-    dest(layout.buildDirectory.file("elide-runtime/elide.$elideArchiveExtension"))
-    outputs.file(layout.buildDirectory.file("elide-runtime/elide.$elideArchiveExtension"))
-}
+val requestedSmokeRuntimeMode = providers.gradleProperty("elide.runtime.mode").orElse("MANAGED")
+val managedSmokeRuntimeVersion = "1.5.1+20260903"
 
-val extractElide by tasks.registering(Copy::class) {
-    val archive = layout.buildDirectory.file("elide-runtime/elide.$elideArchiveExtension")
-    from(if (elideArchiveExtension == "zip") zipTree(archive) else tarTree(archive))
-    into(layout.buildDirectory.dir("elide-runtime"))
-    inputs.file(archive)
-    dependsOn(downloadElide)
-}
-
-val prepareElide by tasks.registering {
-    group = "build"
-    description = "Prepare the Elide runtime"
-    dependsOn(downloadElide, extractElide)
-}
-
-val realRuntimeSmoke by tasks.registering(Exec::class) {
-    executable = runtimeHome.get().file("bin/$elideExecutableName").asFile.absolutePath
-    args("--version")
-    dependsOn(downloadElide, extractElide, prepareElide)
+val realRuntimeSmoke by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Verifies download, checksum, extraction, and caching through the managed plugin runtime."
+    testClassesDirs = realRuntimeSmokeSourceSet.output.classesDirs
+    classpath = realRuntimeSmokeSourceSet.runtimeClasspath
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    })
+    inputs.property("elide.runtime.mode", requestedSmokeRuntimeMode)
+    systemProperty("elide.runtime.mode", requestedSmokeRuntimeMode.get())
+    systemProperty("elide.runtime.version", elideVersion)
+    doFirst {
+        check(requestedSmokeRuntimeMode.get() == "MANAGED") {
+            "realRuntimeSmoke requires -Pelide.runtime.mode=MANAGED"
+        }
+        check(elideVersion == managedSmokeRuntimeVersion) {
+            "realRuntimeSmoke verifies the pinned managed runtime $managedSmokeRuntimeVersion"
+        }
+    }
 }
 
 tasks.check {
