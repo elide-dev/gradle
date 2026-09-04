@@ -5,39 +5,50 @@ selection is explicit, reproducible, and safe to use with the configuration cach
 
 ### Installation
 
-The remote bootstrap script adds the plugin repository and the version catalog. Pin the plugin release in
-`gradle.properties` (or use `latest` while evaluating the plugin):
-
-**`gradle.properties`**
-
-```properties
-elidePluginVersion=1.0.0
-```
+Apply the settings plugin once and select the Elide runtime for the build. The settings plugin release and Elide runtime
+version are independent coordinates.
 
 **`settings.gradle.kts`**
 
 ```kotlin
-val elidePluginVersion: String by settings
-apply(from = "https://gradle.elide.dev/$elidePluginVersion/elide.gradle.kts")
+import dev.elide.gradle.ElideRuntimeMode
+
+plugins {
+    id("dev.elide.settings") version "1.1.0"
+}
+
+elide {
+    runtime {
+        mode = ElideRuntimeMode.MANAGED
+        version = "1.5.1+20260903"
+    }
+}
 ```
 
 **`build.gradle.kts`**
 
 ```kotlin
 plugins {
-    alias(elideRuntime.plugins.elide)
+    id("dev.elide")
     java
 }
 
 elide {
-    enableJavaCompiler.set(true)
+    compiler = true
 }
 ```
 
+Apply `dev.elide` only to projects that use Elide. Non-participating and aggregation projects remain untouched. Gradle
+7.6 Kotlin settings scripts can configure the extension explicitly with
+`configure<ElideSettingsExtension> { runtime { ... } }`; newer Gradle versions provide the `elide` accessor shown above.
+
+To keep the runtime version in a consumer catalog, declare an `elide` entry under `[versions]` and replace the direct
+version with `versionFrom("libs", "elide")`.
+
 Applying the plugin only registers Gradle configuration and task wiring. It does not download or execute Elide, and it
-does not create or modify any file in `JAVA_HOME`. Managed preparation is registered for a managed selection and runs
-when `prepareElideRuntime` is invoked directly or when a consuming task depends on it. Java compilation launches the
-selected executable as `elide javac -- ...` through a small Java entry point; no `elide-javac` shim is required.
+does not create or modify any file in `JAVA_HOME`. Managed preparation runs only when `prepareElideRuntime` is invoked
+directly or when a consuming task depends on it. Java compilation launches the selected executable as
+`elide javac -- ...` through a small Java entry point; no `elide-javac` shim is required.
 
 ### Runtime selection
 
@@ -56,19 +67,23 @@ release when that release publishes a matching asset.
 import dev.elide.gradle.ElideRuntimeMode
 
 elide {
-    runtimeMode.set(ElideRuntimeMode.MANAGED)
-    runtimeVersion.set("1.5.1+20260903")
+    runtime {
+        mode = ElideRuntimeMode.MANAGED
+        version = "1.5.1+20260903"
+    }
 }
 ```
 
-For a local or non-standard executable, configure `elideBin` explicitly:
+For a local or non-standard executable, configure `runtime.executable` explicitly:
 
 ```kotlin
 import dev.elide.gradle.ElideRuntimeMode
 
 elide {
-    runtimeMode.set(ElideRuntimeMode.PATH)
-    elideBin.set(layout.projectDirectory.file("tools/elide"))
+    runtime {
+        mode = ElideRuntimeMode.PATH
+        executable = layout.projectDirectory.file("tools/elide")
+    }
 }
 ```
 
@@ -78,14 +93,14 @@ old manual `elide-javac` setup.
 
 ### Dependency installation
 
-Set `enableInstall.set(true)` to run `elide install` before Java compilation. When Maven integration is enabled, the plugin
+Set `install = true` to run `elide install` before Java compilation. When Maven integration is enabled, the plugin
 adds the generated `.dev/dependencies/m2` repository for dependency resolution. The manifest defaults to `elide.pkl` and
 can be changed with `manifest`:
 
 ```kotlin
 elide {
-    enableInstall.set(true)
-    enableMavenIntegration.set(true)
+    install = true
+    maven = true
     manifest.set(layout.projectDirectory.file("elide.pkl"))
 }
 ```

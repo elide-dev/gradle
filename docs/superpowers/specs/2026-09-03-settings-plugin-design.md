@@ -142,9 +142,11 @@ Plugin application only creates extensions, providers, service registration, and
 - eagerly realize tasks or provider values.
 
 The project plugin reacts to capabilities with `pluginManager.withPlugin(...)` and configures matching task collections
-with `configureEach`. It does not use `afterEvaluate`, `allprojects`, or `subprojects`.
+with `configureEach`. It does not use `allprojects` or `subprojects`. A narrow compatibility seam retains the existing
+end-of-project decision for the legacy local-Maven-repository toggle; runtime selection and task wiring do not use it.
 
-Only tasks that invoke Elide acquire the selected runtime. `PATH` never registers or executes managed download work.
+Only tasks that invoke Elide acquire the selected runtime. `PATH` never executes managed download work; its lazily
+registered preparation task is skipped.
 `MANAGED` uses the exact configured version. `AUTO` retains the documented precedence of explicit executable, PATH,
 then managed fallback.
 
