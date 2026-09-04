@@ -2,10 +2,11 @@
 // Elide Gradle Plugin
 //
 
-val thisVersion = "1.0.0"
+// This is the published plugin/catalog version. It is independent from Elide's runtimeVersion.
+val pluginVersion = "1.0.0"
 
 pluginManagement {
-    // Installs Elide's maven repository for plugin resolution.
+    // Make the Elide plugin repository available to settings plugin resolution.
     repositories {
         maven {
             name = "elide"
@@ -15,7 +16,7 @@ pluginManagement {
 }
 
 dependencyResolutionManagement {
-    // Installs Elide's maven repository for dependency resolution.
+    // Make the Elide repository available to dependency resolution.
     @Suppress("UnstableApiUsage")
     repositories {
         maven {
@@ -24,10 +25,10 @@ dependencyResolutionManagement {
         }
     }
 
-    // Installs Elide's Gradle Version Catalog for dependency management.
+    // Add the catalog published with this plugin release.
     versionCatalogs {
         create("elideRuntime") {
-            from("dev.elide.gradle:elide-gradle-catalog:$thisVersion")
+            from("dev.elide.gradle:elide-gradle-catalog:$pluginVersion")
         }
     }
 }

@@ -35,7 +35,8 @@ class RealRuntimeSmokeTest {
                 .withProjectDir(projectDirectory.toFile())
                 .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
                 .withEnvironment(isolatedEnvironment(gradleUserHome))
-                .withArguments("verifyManagedRuntime", "-Pelide.runtime.mode=" + runtimeMode)
+                .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                        "verifyManagedRuntime", "-Pelide.runtime.mode=" + runtimeMode)
                 .build();
 
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());

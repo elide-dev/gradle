@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Repository wrapper: Gradle 9.7.1 with SHA-256 `acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20ad`.
+- Repository wrapper: Gradle 9.7.1 with SHA-256 `acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a`.
 - Published plugin bytecode: Java 17, independent of the daemon JDK.
 - Consumer matrix: Gradle 7.6.4/Java 17; Gradle 8.14.5/Java 17 and 24; Gradle 9.7.1/Java 17 and 26.
 - Runtime modes: `AUTO`, `PATH`, and `MANAGED`; `AUTO` precedence is explicit executable, PATH executable, managed runtime.
@@ -64,7 +64,7 @@ download-task = { id = "de.undercouch.download", version.ref = "download-task" }
 Set `distributionUrl` to `https\://services.gradle.org/distributions/gradle-9.7.1-bin.zip` and add:
 
 ```properties
-distributionSha256Sum=acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20ad
+distributionSha256Sum=acd53f1edaf02f1a8ff99879f8a34b302661a057d9b063ae9e35b552f804d20a
 ```
 
 Run twice so properties and wrapper JAR are current:
