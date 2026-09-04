@@ -349,4 +349,83 @@ Result: exit 0.
 
 - The hostile-argument execution assertion requires the planned Windows CI runner; it is correctly conditional and was not represented as executed on this macOS host. The test uses the shared native Windows fixture and records exact individual argv values when that matrix runs.
 - The repository continues to emit pre-existing restricted-native-access, Java-installation-path, and Gradle deprecation warnings. They did not cause test or configuration-cache failures.
+
+---
+
+## Review-fix round 4: stacktrace-safe failures and one bounded redaction policy
+
+### Implementation
+
+- Removed the raw process-start exception as the cause of the structured `GradleException`. The error text is incorporated only through the redaction policy; Gradle therefore has no unredacted nested exception to display with `--stacktrace`.
+- Replaced the repeated, unbounded `environmentValues()` collection with one static `RedactionPolicy`. It reads at most 257 non-empty inherited values while initializing, stores no more than 256 references plus their bounded UTF-8 forms (each at most 1,024 Java characters / 3 KiB), and uses the same policy for context and captured streams.
+- If either count or value size exceeds the fixed metadata bound, the policy returns `[redacted]` for every untrusted diagnostic field and capture withholds child output. Literal labels, the numeric exit status, and the fixed withheld-output marker remain useful and cannot be mutated by an inherited value.
+- Added multibyte UTF-8 boundary coverage alongside the existing byte-boundary regression.
+- Removed the prior hostile-metacharacter batch assertion. Windows `.cmd` files are documented as test-only fixture helpers; production runtime resolution uses native `elide.exe`, which continues through direct `ExecOperations` execution. The Windows lane retains ordinary fixture coverage for `install` and adds exact `javac`, `--`, and space-containing compiler-argument recording.
+
+### TDD evidence
+
+#### RED
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.reportsAnUnstartableExecutableAsAStructuredRedactedFailure --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.withholdsAllUntrustedDiagnosticFieldsWhenEnvironmentMetadataIsOverLimit --no-configuration-cache
+```
+
+Result: `2 tests completed, 2 failed`.
+
+- With `--stacktrace`, Gradle traversed the retained `ProcessExecutionException` cause and printed the secret-bearing executable/project path after the otherwise redacted outer failure.
+- With 257 added environment values, the old capture policy withheld child output but the independently rebuilt context redactor still emitted the opaque project-path component, demonstrating both incomplete conservative redaction and environment-dependent diagnostic work.
+
+#### GREEN
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.reportsAnUnstartableExecutableAsAStructuredRedactedFailure --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.withholdsAllUntrustedDiagnosticFieldsWhenEnvironmentMetadataIsOverLimit --tests dev.elide.gradle.DependencyInstallFunctionalTest.windowsTestFixtureRecordsOrdinaryCompilerArguments --no-configuration-cache
+```
+
+Result: `BUILD SUCCESSFUL in 4s`. The stacktrace regression retained literal `executable`, `working directory`, and `exit code -1` context without the secret. The count-over-limit regression omitted both opaque context and child output. The native-Windows ordinary-compiler fixture test was correctly skipped on macOS.
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.redactsAMultibyteEnvironmentValueThatCrossesTheCaptureBoundary --no-configuration-cache
+```
+
+Result: `BUILD SUCCESSFUL in 2s`; the multibyte secret did not appear when its first UTF-8 code point crossed the 64-KiB visible boundary.
+
+### Final verification
+
+```text
+./gradlew :elide-gradle-plugin:test :elide-gradle-plugin:functionalTest --configuration-cache
+```
+
+Result: the complete unit/functional suite completed with zero test failures; the following identical invocation reported `Configuration cache entry reused.`
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --configuration-cache
+./gradlew :elide-gradle-plugin:functionalTest --configuration-cache
+```
+
+Result: both commands completed successfully; the second reported `Configuration cache entry reused.`
+
+```text
+git diff --check
+```
+
+Result: exit 0.
+
+### Files changed in this round
+
+- `elide-gradle-plugin/src/main/java/dev/elide/gradle/ElideExecTask.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/CompilerIntegrationFunctionalTest.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/DependencyInstallFunctionalTest.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/PlatformFixture.java`
+
+### Self-review
+
+- Process-launch failures no longer retain an exception cause; both outer output and `--stacktrace` are covered by a secret-path regression.
+- The redaction policy's allocation and traversal bounds are fixed before any environment value is copied. Oversized values and count overflow short-circuit to the conservative policy instead of collecting or sorting the complete inherited environment.
+- The same fixed policy drives byte capture matching and text diagnostics, eliminating divergent stream/context behavior. The byte and multibyte boundary tests exercise both sides of the visible capture limit.
+- Batch helpers remain test code. No production command line is assembled for `cmd.exe`, native `elide.exe` remains the resolved Windows runtime, and the removed hostile test is not represented as a user-facing `.cmd` compatibility contract.
+- Normal tests remain local fixtures or local fixture servers only; no fake `JAVA_HOME`, real runtime, ambient developer `PATH`, or real network was added.
+
+### Residual Windows verification
+
+- macOS did not execute the two Windows-only batch-fixture tests. They exercise only ordinary fixture arguments (`install`, and `javac -- -Dfixture.compiler.argument=has a space`) and are explicitly conditioned for the planned native Windows CI lane. The codebase no longer claims hostile metacharacter preservation for `.cmd` files.
 - Fixture setup no longer creates generated Maven output. The fake installers do, while no normal test uses a real Elide executable, real network, or developer `PATH`.
