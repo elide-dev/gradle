@@ -41,7 +41,7 @@ public abstract class ElideExecTask extends DefaultTask {
             + MAX_CAPTURED_OUTPUT_BYTES + " bytes]";
     private static final String WITHHELD_OUTPUT_MARKER = "[Captured output withheld: environment values exceed the "
             + "redaction-safe capture bound]";
-    private static final CaptureRedaction CAPTURE_REDACTION = CaptureRedaction.create();
+    private static final RedactionPolicy REDACTION_POLICY = RedactionPolicy.create();
 
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
@@ -92,8 +92,7 @@ public abstract class ElideExecTask extends DefaultTask {
             throw new GradleException(failureMessage(
                     -1,
                     standardOutput.content(),
-                    exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()),
-                    exception);
+                    exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()));
         }
         if (result.getExitValue() != 0) {
             throw new GradleException(failureMessage(
@@ -105,33 +104,21 @@ public abstract class ElideExecTask extends DefaultTask {
 
     private String failureMessage(int exitCode, String standardOutput, String errorOutput) {
         String message = "Elide command failed: executable "
-                + redactUntrusted(getElideExecutable().get().getAsFile().getAbsolutePath())
+                + REDACTION_POLICY.redact(getElideExecutable().get().getAsFile().getAbsolutePath())
                 + ", working directory "
-                + redactUntrusted(getWorkingDirectory().get().getAsFile().getAbsolutePath())
+                + REDACTION_POLICY.redact(getWorkingDirectory().get().getAsFile().getAbsolutePath())
                 + ", exit code " + exitCode + ".";
         if (!standardOutput.isBlank()) {
-            message += "\nStandard output:\n" + redactUntrusted(standardOutput);
+            message += "\nStandard output:\n" + redactOutput(standardOutput);
         }
         if (!errorOutput.isBlank()) {
-            message += "\nStandard error:\n" + redactUntrusted(errorOutput);
+            message += "\nStandard error:\n" + redactOutput(errorOutput);
         }
         return message;
     }
 
-    private static String redactUntrusted(String untrustedValue) {
-        String redacted = untrustedValue;
-        for (String environmentValue : environmentValues()) {
-            redacted = redacted.replace(environmentValue, "[redacted]");
-        }
-        return redacted;
-    }
-
-    private static List<String> environmentValues() {
-        return System.getenv().values().stream()
-                .filter(value -> value != null && !value.isEmpty())
-                .distinct()
-                .sorted(Comparator.comparingInt(String::length).reversed())
-                .toList();
+    private static String redactOutput(String output) {
+        return WITHHELD_OUTPUT_MARKER.equals(output) ? output : REDACTION_POLICY.redact(output);
     }
 
     /** Limits captured process output so a noisy failed command cannot exhaust the Gradle daemon. */
@@ -143,7 +130,7 @@ public abstract class ElideExecTask extends DefaultTask {
         @Override
         public void write(int value) {
             sawOutput = true;
-            if (!CAPTURE_REDACTION.isSafe()) {
+            if (!REDACTION_POLICY.isSafe()) {
                 return;
             }
             if (delegate.size() < MAX_CAPTURE_STORAGE_BYTES) {
@@ -159,7 +146,7 @@ public abstract class ElideExecTask extends DefaultTask {
                 return;
             }
             sawOutput = true;
-            if (!CAPTURE_REDACTION.isSafe()) {
+            if (!REDACTION_POLICY.isSafe()) {
                 return;
             }
             int available = MAX_CAPTURE_STORAGE_BYTES - delegate.size();
@@ -176,7 +163,7 @@ public abstract class ElideExecTask extends DefaultTask {
             if (!sawOutput) {
                 return "";
             }
-            if (!CAPTURE_REDACTION.isSafe()) {
+            if (!REDACTION_POLICY.isSafe()) {
                 return WITHHELD_OUTPUT_MARKER;
             }
             byte[] captured = delegate.toByteArray();
@@ -184,7 +171,7 @@ public abstract class ElideExecTask extends DefaultTask {
             ByteArrayOutputStream redacted = new ByteArrayOutputStream(outputLimit);
             boolean renderedTruncated = false;
             for (int offset = 0; offset < outputLimit; ) {
-                int redactionLength = CAPTURE_REDACTION.matchingLength(captured, offset);
+                int redactionLength = REDACTION_POLICY.matchingLength(captured, offset);
                 if (redactionLength == 0) {
                     if (redacted.size() == MAX_CAPTURED_OUTPUT_BYTES) {
                         renderedTruncated = true;
@@ -209,53 +196,75 @@ public abstract class ElideExecTask extends DefaultTask {
     }
 
     /** Fixed-size capture-redaction metadata; unsafe environments withhold child output. */
-    private static final class CaptureRedaction {
+    private static final class RedactionPolicy {
         private final boolean safe;
-        private final List<byte[]> values;
+        private final List<RedactionValue> values;
 
-        private CaptureRedaction(boolean safe, List<byte[]> values) {
+        private RedactionPolicy(boolean safe, List<RedactionValue> values) {
             this.safe = safe;
             this.values = values;
         }
 
-        private static CaptureRedaction create() {
-            List<byte[]> values = new ArrayList<>();
+        private static RedactionPolicy create() {
+            List<RedactionValue> values = new ArrayList<>();
             for (String value : System.getenv().values()) {
                 if (value == null || value.isEmpty()) {
                     continue;
                 }
                 if (values.size() == MAX_REDACTION_VALUES || value.length() > MAX_REDACTION_VALUE_CHARS) {
-                    return new CaptureRedaction(false, List.of());
+                    return new RedactionPolicy(false, List.of());
                 }
                 byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
                 if (bytes.length > MAX_REDACTION_VALUE_BYTES) {
-                    return new CaptureRedaction(false, List.of());
+                    return new RedactionPolicy(false, List.of());
                 }
-                values.add(bytes);
+                values.add(new RedactionValue(value, bytes));
             }
-            values.sort(Comparator.comparingInt((byte[] value) -> value.length).reversed());
-            return new CaptureRedaction(true, List.copyOf(values));
+            values.sort(Comparator.comparingInt((RedactionValue value) -> value.bytes.length).reversed());
+            return new RedactionPolicy(true, List.copyOf(values));
         }
 
         private boolean isSafe() {
             return safe;
         }
 
+        private String redact(String untrustedValue) {
+            if (!safe) {
+                return "[redacted]";
+            }
+            String redacted = untrustedValue;
+            for (RedactionValue value : values) {
+                redacted = redacted.replace(value.text, "[redacted]");
+            }
+            return redacted;
+        }
+
         private int matchingLength(byte[] captured, int offset) {
-            for (byte[] value : values) {
-                int available = Math.min(value.length, captured.length - offset);
+            for (RedactionValue value : values) {
+                int available = Math.min(value.bytes.length, captured.length - offset);
                 boolean matches = available > 0;
                 for (int index = 0; index < available; index++) {
-                    if (captured[offset + index] != value[index]) {
+                    if (captured[offset + index] != value.bytes[index]) {
                         matches = false;
                         break;
                     }
                 }
-                if (matches && (available == value.length || offset + available == captured.length)) {
-                    return value.length;
+                if (matches && (available == value.bytes.length || offset + available == captured.length)) {
+                    return value.bytes.length;
                 }
             }
             return 0;
+        }
+    }
+
+    /** A fixed-size environment value reference plus its bounded UTF-8 capture form. */
+    private static final class RedactionValue {
+        private final String text;
+        private final byte[] bytes;
+
+        private RedactionValue(String text, byte[] bytes) {
+            this.text = text;
+            this.bytes = bytes;
         }
     }
 }

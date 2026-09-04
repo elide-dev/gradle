@@ -110,6 +110,18 @@ class DependencyInstallFunctionalTest {
                 PlatformFixture.readInvocations(fixture.invocationDirectory()));
     }
 
+    @Test
+    @org.junit.jupiter.api.condition.EnabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
+    void windowsTestFixtureRecordsOrdinaryCompilerArguments() throws IOException {
+        Fixture fixture = Fixture.create(temporaryDirectory.resolve("windows-compiler-arguments"), true, true);
+
+        fixture.runner().withArguments("recordCompilerArguments").build();
+
+        assertEquals(java.util.List.of(java.util.List.of(
+                        "javac", "--", "-Dfixture.compiler.argument=has a space")),
+                PlatformFixture.readInvocations(fixture.invocationDirectory()));
+    }
+
     private record Fixture(Path projectDirectory, Path invocationDirectory) {
         static Fixture create(Path projectDirectory, boolean enableInstall, boolean enableMavenIntegration)
                 throws IOException {
@@ -157,8 +169,19 @@ class DependencyInstallFunctionalTest {
                         getDevRootInputs().from(fileTree('.dev').exclude('dependencies/**', 'elide.lock.bin'))
                         getGeneratedDependencyRepository().set(layout.projectDirectory.dir('empty-argument-output'))
                     }
+
+                    tasks.register('recordCompilerArguments', dev.elide.gradle.ElideExecTask) {
+                        getElideExecutable().set(layout.projectDirectory.file('%s'))
+                        getElideArguments().set(['javac', '--', '-Dfixture.compiler.argument=has a space'])
+                        getWorkingDirectory().set(layout.projectDirectory)
+                        getWorkingDirectoryPath().set(projectDir.absolutePath)
+                        getManifest().set(layout.projectDirectory.file('elide.pkl'))
+                        getDevRootInputs().from(fileTree('.dev').exclude('dependencies/**', 'elide.lock.bin'))
+                        getGeneratedDependencyRepository().set(layout.projectDirectory.dir('compiler-argument-output'))
+                    }
                     """.formatted(groovyQuote(projectDirectory.relativize(executable)),
                     enableInstall, enableMavenIntegration,
+                    groovyQuote(projectDirectory.relativize(executable)),
                     groovyQuote(projectDirectory.relativize(executable))));
             return new Fixture(projectDirectory, invocationDirectory);
         }

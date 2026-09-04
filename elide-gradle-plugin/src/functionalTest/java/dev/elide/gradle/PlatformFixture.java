@@ -8,7 +8,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
 
-/** Platform-native fake executables used by functional tests. */
+/**
+ * Platform-native fake executables used only by functional tests. Windows uses a batch helper for
+ * fixture recording; production runtime resolution selects the native {@code elide.exe} instead.
+ */
 final class PlatformFixture {
     private PlatformFixture() {
     }

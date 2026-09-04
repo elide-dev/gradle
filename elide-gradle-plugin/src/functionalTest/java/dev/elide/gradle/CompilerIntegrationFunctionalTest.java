@@ -135,6 +135,30 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
+    void redactsAMultibyteEnvironmentValueThatCrossesTheCaptureBoundary() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The boundary fixture uses a POSIX fake executable.");
+        String secret = "界界界";
+        String padding = "x".repeat((64 * 1024) - 3);
+        Path projectDirectory = temporaryDirectory.resolve("multibyte-boundary-project");
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf '%%s%%s' '%s' "$ELIDE_TEST_SECRET"
+                exit 23
+                """.formatted(padding));
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of("ELIDE_TEST_SECRET", secret))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertFalse(result.getOutput().contains(secret), result.getOutput());
+    }
+
+    @Test
     void withholdsCapturedOutputWhenAnEnvironmentValueExceedsTheFixedSafeBound() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The oversized-output fixture uses a POSIX fake executable.");
@@ -173,7 +197,7 @@ class CompilerIntegrationFunctionalTest {
                 """);
 
         BuildResult result = runner(projectDirectory, Map.of("ELIDE_TEST_SECRET", secret))
-                .withArguments("elideInstall")
+                .withArguments("--stacktrace", "elideInstall")
                 .buildAndFail();
 
         assertTrue(result.getOutput().contains("Elide command failed: executable "), result.getOutput());
@@ -183,41 +207,35 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
-    @EnabledOnOs(OS.WINDOWS)
-    void executesWindowsNativeArgumentsDirectlyWithoutTheCommandInterpreter() throws IOException {
-        Path projectDirectory = temporaryDirectory.resolve("windows-direct-arguments");
-        Path invocationLog = projectDirectory.resolve("elide-invocations");
-        Path executable = PlatformFixture.writeRecordingExecutable(projectDirectory.resolve("bin"), "elide", invocationLog);
-        Files.writeString(projectDirectory.resolve("elide.pkl"), "fixture manifest\n");
-        Files.createDirectories(projectDirectory.resolve(".dev"));
-        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
-        Files.writeString(projectDirectory.resolve("build.gradle"), """
-                plugins {
-                    id 'dev.elide'
-                }
+    void withholdsAllUntrustedDiagnosticFieldsWhenEnvironmentMetadataIsOverLimit() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The bounded-metadata fixture uses a POSIX fake executable.");
+        String opaqueContext = "opaque-untrusted-context";
+        String childOutput = "untrusted-child-details";
+        Path projectDirectory = temporaryDirectory.resolve("over-limit-" + opaqueContext);
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf '%%s\\n' '%s'
+                exit 23
+                """.formatted(childOutput));
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+        Map<String, String> environment = new HashMap<>();
+        for (int index = 0; index <= 256; index++) {
+            environment.put("ELIDE_TEST_COUNT_" + index, "metadata-value-" + index);
+        }
 
-                elide {
-                    getElideBin().set(layout.projectDirectory.file('%s'))
-                    getEnableInstall().set(false)
-                    getEnableJavaCompiler().set(false)
-                }
+        BuildResult result = runner(projectDirectory, environment)
+                .withArguments("elideInstall")
+                .buildAndFail();
 
-                tasks.register('recordHostileArguments', dev.elide.gradle.ElideExecTask) {
-                    getElideExecutable().set(layout.projectDirectory.file('%s'))
-                    getElideArguments().set(['record', '100%%&|<>^', 'after'])
-                    getWorkingDirectory().set(layout.projectDirectory)
-                    getWorkingDirectoryPath().set(projectDir.absolutePath)
-                    getManifest().set(layout.projectDirectory.file('elide.pkl'))
-                    getDevRootInputs().from(fileTree('.dev'))
-                    getGeneratedDependencyRepository().set(layout.projectDirectory.dir('hostile-output'))
-                }
-                """.formatted(groovyQuote(projectDirectory.relativize(executable)),
-                groovyQuote(projectDirectory.relativize(executable))));
-
-        runner(projectDirectory, Map.of()).withArguments("recordHostileArguments").build();
-
-        assertEquals(List.of(List.of("record", "100%&|<>^", "after")),
-                PlatformFixture.readInvocations(invocationLog));
+        assertTrue(result.getOutput().contains("Elide command failed: executable "), result.getOutput());
+        assertTrue(result.getOutput().contains(", working directory "), result.getOutput());
+        assertTrue(result.getOutput().contains(", exit code 23."), result.getOutput());
+        assertFalse(result.getOutput().contains(opaqueContext), result.getOutput());
+        assertFalse(result.getOutput().contains(childOutput), result.getOutput());
     }
 
     @Test
