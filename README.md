@@ -210,3 +210,5 @@ dependencies while constructing the task graph or storing the configuration cach
 (see Gradle's [dependency substitution rules](https://docs.gradle.org/current/userguide/resolution_rules.html#sec:dependency_substitution_rules)).
 Changes to the Elide manifest require another preparation invocation. The default example uses Gradle-owned dependency
 resolution so a fresh checkout works in one command.
+
+See [integration testing](docs/testing.md) for the required native CI suite, coverage boundaries, and benchmark follow-up.

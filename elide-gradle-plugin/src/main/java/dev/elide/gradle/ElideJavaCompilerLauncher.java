@@ -37,7 +37,9 @@ public final class ElideJavaCompilerLauncher {
             var out = new java.io.DataOutputStream(socket.getOutputStream());
             out.writeUTF(endpoint[1]);
             out.writeUTF(arguments[3]);
-            out.writeUTF(System.getProperty("user.dir"));
+            // Direct System.getProperty calls are instrumented by Gradle 7.x, but this
+            // launcher runs in a standalone JVM without Gradle's instrumentation classes.
+            out.writeUTF(java.nio.file.Path.of("").toAbsolutePath().toString());
             if (!arguments[2].startsWith("request=") || !arguments[4].equals("javac")) {
                 throw new IOException("Malformed worker launcher arguments");
             }

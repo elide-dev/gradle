@@ -34,7 +34,7 @@ public abstract class ElideDependencyReportTask extends DefaultTask {
         }
 
         @InputFile
-        @PathSensitive(PathSensitivity.NAME_ONLY)
+        @PathSensitive(PathSensitivity.NONE)
         public File getFile() {
             return file;
         }

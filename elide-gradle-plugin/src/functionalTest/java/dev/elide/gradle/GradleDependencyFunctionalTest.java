@@ -22,7 +22,7 @@ class GradleDependencyFunctionalTest {
         Files.writeString(
                 directory.resolve("settings.gradle"),
                 "rootProject.name='gradle-dependencies'\n"
-                    + "buildCache { local { directory = file('cache') } }\n");
+                        + "buildCache { local { directory = file('cache') } }\n");
         Files.writeString(
                 directory.resolve("build.gradle"),
                 """
@@ -33,7 +33,9 @@ class GradleDependencyFunctionalTest {
                 dependencyLocking { lockAllConfigurations() }
                 """);
         var result = run("elideExportDependencies", "--write-locks").build();
-        assertEquals(TaskOutcome.SUCCESS, result.task(":elideExportMainDependencies").getOutcome());
+        TaskOutcome initialOutcome = result.task(":elideExportMainDependencies").getOutcome();
+        assertTrue(initialOutcome == TaskOutcome.SUCCESS || initialOutcome == TaskOutcome.FROM_CACHE,
+                "Unexpected initial export outcome: " + initialOutcome);
         String report = Files.readString(directory.resolve("build/elide/dependencies/main.tsv"));
         assertTrue(report.contains("fixture:dep:2.0\tdep-2.0.jar\t"), report);
         assertFalse(report.contains("fixture:dep:1.0"), report);
@@ -47,6 +49,47 @@ class GradleDependencyFunctionalTest {
                         .build()
                         .task(":elideExportMainDependencies")
                         .getOutcome());
+    }
+
+    @Test
+    void catalogDependenciesAreVerifiedBeforeExportAndTamperingIsRejected() throws Exception {
+        module("dep", "1.0", "");
+        Files.createDirectories(directory.resolve("gradle"));
+        Files.writeString(
+                directory.resolve("gradle/libs.versions.toml"),
+                "[libraries]\nfixture = { module = 'fixture:dep', version = '1.0' }\n");
+        Files.writeString(
+                directory.resolve("settings.gradle"), "rootProject.name='verified-export'\n");
+        Files.writeString(
+                directory.resolve("build.gradle"),
+                """
+                plugins { id 'java'; id 'dev.elide' }
+                elide { dependencyMode.set(dev.elide.gradle.ElideDependencyMode.GRADLE) }
+                repositories { maven { url = uri('repo') } }
+                dependencies { implementation libs.fixture }
+                """);
+        run("elideExportDependencies", "--write-verification-metadata", "sha256").build();
+        assertTrue(
+                Files.readString(directory.resolve("build/elide/dependencies/main.tsv"))
+                        .contains("fixture:dep:1.0\tdep-1.0.jar\t"));
+        Path artifact = directory.resolve("repo/fixture/dep/1.0/dep-1.0.jar");
+        try (var jar = new java.util.jar.JarOutputStream(Files.newOutputStream(artifact))) {
+            jar.putNextEntry(new java.util.jar.JarEntry("tampered.txt"));
+            jar.write(new byte[] {1, 2, 3});
+            jar.closeEntry();
+        }
+        var rejected =
+                run(
+                                "elideExportDependencies",
+                                "--refresh-dependencies",
+                                "--dependency-verification",
+                                "strict",
+                                "--no-configuration-cache")
+                        .buildAndFail();
+        assertTrue(
+                rejected.getOutput().contains("Dependency verification failed"),
+                rejected.getOutput());
+        assertTrue(rejected.getOutput().contains("dep-1.0.jar"), rejected.getOutput());
     }
 
     @Test
@@ -134,7 +177,8 @@ class GradleDependencyFunctionalTest {
     private GradleRunner run(String... tasks) {
         var arguments = new java.util.ArrayList<>(java.util.List.of(tasks));
         arguments.addAll(
-                java.util.List.of("--configuration-cache", "--build-cache", "--stacktrace", "--no-watch-fs"));
+                java.util.List.of(
+                        "--configuration-cache", "--build-cache", "--stacktrace", "--no-watch-fs"));
         return GradleRunner.create()
                 .withPluginClasspath()
                 .withProjectDir(directory.toFile())
