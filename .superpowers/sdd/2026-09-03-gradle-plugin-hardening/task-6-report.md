@@ -3,7 +3,7 @@
 ## Implementation
 
 - Added `compatibilityTest`, a JUnit 6.1.3/TestKit source set. Its Java test launcher is a Java 17 toolchain, independently of the JDK that runs the repository wrapper.
-- Added `ConsumerCompatibilityTest`, parameterized with the literal consumer Gradle versions `7.6.4`, `8.14.5`, and `9.7.1`. Every fixture applies `dev.elide` and `java`, supplies the existing platform-native explicit fake Elide executable, runs `help` and `compileJava`, and verifies the fake received the `javac --` invocation.
+- Added `ConsumerCompatibilityTest`, parameterized with the literal consumer Gradle versions `7.6.4`, `8.14.5`, and `9.7.1`. Every fixture applies `dev.elide` and `java`, supplies an explicit native Java-launcher fixture, runs `help` and `compileJava`, and verifies the fixture received the `javac --` invocation.
 - The fixture environment contains only its Java 17 `JAVA_HOME`, that JDK's `bin` directory on `PATH`, and a fixture `GRADLE_USER_HOME`; it never selects an Elide executable from the developer or runner `PATH`, and it never selects the managed Elide runtime.
 - Registered functional and compatibility source sets together with the Gradle plugin metadata provider. This preserves the `plugin-under-test-metadata.properties` classpath entry for both TestKit suites. Added the explicit Gradle TestKit dependency needed when the shared functional fixture output is compiled.
 - Replaced the primary workflow with a native OS matrix: Ubuntu, macOS, and Windows run the 9.7.1 repository wrapper on Java 17; Windows invokes `./gradlew.bat`. Ubuntu also installs and invokes Gradle 8.14.5 on Java 24 and Gradle 9.7.1 on Java 26 through `setup-gradle`'s `gradle-version` input. The literal TestKit matrix continues to cover the consumer versions in each lane.
@@ -59,12 +59,12 @@ The published plugin continues to target Java 17 and supports Gradle 7.6.4 as it
 - Explicit fake Elide and the isolated `PATH` prevent an installed Elide executable or managed Elide download from satisfying the test.
 - Source-set registration provides TestKit metadata to both functional and compatibility suites.
 - Both workflows use `working-directory` for command steps and contain no `cd`, shell shim, or setup-Elide step.
-- The scheduled workflow includes the required initial `elide.zip:443` origin and GitHub redirect endpoints, plus the minimum wrapper bootstrap host identified below.
+- The scheduled workflow includes the production resolver's GitHub release origin and redirect endpoints, plus the minimum wrapper bootstrap host identified below.
 - All requested action pins match the task brief exactly.
 
 ## Unverified native lanes
 
-The local verification ran on macOS with the POSIX fake executable. GitHub-hosted Ubuntu and Windows matrix jobs, the Java 24 and Java 26 hosted lanes, and the three external-release scheduled smoke jobs have not run from this workspace. In particular, native Windows batch-fixture execution and the pinned real-release download/redirect path remain CI verification responsibilities.
+The local verification ran on macOS with the direct native Java-launcher fixture. GitHub-hosted Ubuntu and Windows matrix jobs, the Java 24 and Java 26 hosted lanes, and the three external-release scheduled smoke jobs have not run from this workspace. In particular, direct Windows `java.exe` fixture execution and the pinned real-release download/redirect path remain CI verification responsibilities.
 
 ## Fix round 1: native execution and managed-path smoke
 
@@ -93,3 +93,26 @@ The local verification ran on macOS with the POSIX fake executable. GitHub-hoste
 | `actionlint .github/workflows/*.yml`, Ruby `YAML.safe_load_file(..., aliases: false)`, and `git diff --check` | Passed. |
 
 The real external-release smoke is intentionally not executed locally because it requires the pinned release network path. It remains scheduled/manual-only and outside the normal `build`/`check` lifecycle. Native Windows command execution, cold-cache egress, and hosted Java 24/26 pairs remain unverified locally.
+
+## Fix round 2: direct native fixture and Java 17 discovery
+
+### RED/GREEN
+
+1. **Direct native fixture (RED):** `ConsumerCompatibilityTest` was changed to request `PlatformFixture.writeJavaRuntimeFixture(...)`; `./gradlew :elide-gradle-plugin:compileCompatibilityTestJava` then failed because that fixture did not exist. **GREEN:** the test-only fixture now compiles `javac` and `install` classes into a fixture classpath, uses the absolute Java 17 launcher (`java.exe` on Windows) as the explicit Elide executable, and passes its classpath/log directory only to the nested TestKit build. The first direct plugin argument selects the matching Java fixture class. No production code contains a fixture property, `cmd.exe`, or script-launch branch: production Elide executables remain direct executable-plus-argv invocations.
+2. **Absolute explicit runtime correction:** the first green candidate incorrectly rendered the external Java executable through `layout.projectDirectory.file(...)`. The nested build therefore treated it as unusable and selected the managed runtime, which was visible from `prepareElideRuntime` running before `compileJava`. Rendering the absolute path through Gradle's `file(...)` API fixed selection; the rerun completed all three literal Gradle versions with the direct Java fixture.
+
+### Current-toolchain and egress corrections
+
+- The Java 24 / Gradle 8.14.5 and Java 26 / Gradle 9.7.1 rows first install Java 17 with a step id, capture its action `path` output in `JAVA17_HOME`, then install the matrix JDK as the default outer Gradle runtime. The diagnostic prints both launchers and `javaToolchains`; the Gradle build passes `-Dorg.gradle.java.installations.paths="$JAVA17_HOME"`, so `compatibilityTest` can select its Java 17 launcher without making Java 17 the matrix JVM.
+- The scheduled harden-runner allow-list now contains only `services.gradle.org:443`, `github.com:443`, `release-assets.githubusercontent.com:443`, and `objects.githubusercontent.com:443`. `elide.zip:443` was removed because the production resolver starts at `https://github.com/elide-dev/elide/releases/download`, not that obsolete origin. This explicitly supersedes the prior egress ruling that retained `elide.zip:443`; `services.gradle.org:443` remains required for an empty-cache 9.7.1 wrapper bootstrap.
+
+### Fix-round verification
+
+| Command | Result |
+| --- | --- |
+| `./gradlew :elide-gradle-plugin:compileCompatibilityTestJava` after changing the test | Failed as expected: `writeJavaRuntimeFixture(Path)` was missing. |
+| `./gradlew :elide-gradle-plugin:compatibilityTest --rerun-tasks` | Passed after the direct Java fixture and absolute explicit runtime correction; Gradle 7.6.4, 8.14.5, and 9.7.1 all executed. |
+| `./gradlew build compatibilityTest` | Passed after the direct-fixture change. |
+| `actionlint .github/workflows/*.yml`, Ruby `YAML.safe_load_file(..., aliases: false)`, and `git diff --check` | Passed. |
+
+Native Windows execution and the hosted Java 24/26 matrix remain unverified locally, but the Windows compatibility fixture now directly executes the absolute `java.exe` rather than a batch script or shell wrapper.

@@ -6,6 +6,7 @@ import org.gradle.api.Task;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.JavaCompile;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,7 +38,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
         }
 
         project.getTasks().withType(JavaCompile.class).configureEach(task -> {
-            configureJavaCompileToUseElide(project, task, resolution);
+            configureJavaCompileToUseElide(task, resolution);
             addManagedPreparationDependency(task, resolution);
             if (installTask != null) {
                 task.dependsOn(installTask);
@@ -45,20 +46,17 @@ public class ElideGradlePlugin implements Plugin<Project> {
         });
     }
 
-    private void configureJavaCompileToUseElide(
-            Project project, JavaCompile task, ElideRuntimeResolution resolution) {
+    private void configureJavaCompileToUseElide(JavaCompile task, ElideRuntimeResolution resolution) {
         var options = task.getOptions();
         options.setFork(true);
+        options.getForkOptions().setExecutable(
+                resolution.executable().get().getAsFile().getAbsolutePath());
         List<String> existing = Optional.ofNullable(options.getForkOptions().getJvmArgs()).orElseGet(List::of);
-        var invocation = ElideJavaCompilerInvocation.create(
-                System.getProperty("os.name"),
-                project.getProviders().systemProperty(ElideJavaCompilerInvocation.TEST_WINDOWS_CMD_FIXTURE_PROPERTY)
-                        .map(Boolean::parseBoolean)
-                        .getOrElse(false),
-                resolution.executable().get().getAsFile().toPath(),
-                existing);
-        options.getForkOptions().setExecutable(invocation.executable());
-        options.getForkOptions().setJvmArgs(invocation.arguments());
+        List<String> arguments = new ArrayList<>(existing.size() + 2);
+        arguments.add("javac");
+        arguments.add("--");
+        arguments.addAll(existing);
+        options.getForkOptions().setJvmArgs(arguments);
     }
 
     private TaskProvider<ElideExecTask> configureInstallTask(

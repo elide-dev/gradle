@@ -34,7 +34,6 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             services.gradle.org:443
-            elide.zip:443
             github.com:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443

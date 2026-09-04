@@ -26,11 +26,8 @@ class ConsumerCompatibilityTest {
     void appliesThePluginAndCompilesJavaWithEachSupportedGradleVersion(String gradleVersion) throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("gradle-" + gradleVersion);
         Path invocationDirectory = projectDirectory.resolve("elide-invocations");
-        Path executable = PlatformFixture.writeRecordingExecutable(
-                projectDirectory.resolve("bin"), "elide", invocationDirectory);
-        if (!PlatformFixture.isWindows()) {
-            PlatformFixture.linkActualJavaTools(executable.getParent());
-        }
+        Path fixtureClassPath = projectDirectory.resolve("elide-fixture-classes");
+        Path executable = PlatformFixture.writeJavaRuntimeFixture(fixtureClassPath);
         writeConsumerProject(projectDirectory, executable);
 
         BuildResult result = GradleRunner.create()
@@ -38,10 +35,8 @@ class ConsumerCompatibilityTest {
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
                 .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
-                .withEnvironment(isolatedEnvironment(projectDirectory))
-                .withArguments(
-                        "-Ddev.elide.gradle.test.windowsCmdFixture=true",
-                        "help", "compileJava", "--stacktrace")
+                .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory))
+                .withArguments("help", "compileJava", "--stacktrace")
                 .build();
 
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
@@ -64,18 +59,21 @@ class ConsumerCompatibilityTest {
                 }
 
                 elide {
-                    getElideBin().set(layout.projectDirectory.file('%s'))
+                    getElideBin().set(file('%s'))
                     getEnableInstall().set(false)
                 }
-                """.formatted(groovyQuote(projectDirectory.relativize(executable))));
+                """.formatted(groovyQuote(executable)));
     }
 
-    private static Map<String, String> isolatedEnvironment(Path projectDirectory) {
+    private static Map<String, String> isolatedEnvironment(
+            Path projectDirectory, Path fixtureClassPath, Path invocationDirectory) {
         Path javaHome = Path.of(System.getProperty("java.home"));
         Map<String, String> environment = new HashMap<>();
         environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
         environment.put("JAVA_HOME", javaHome.toString());
         environment.put("PATH", javaHome.resolve("bin").toString() + File.pathSeparator);
+        environment.put("CLASSPATH", fixtureClassPath.toString());
+        environment.put("ELIDE_FIXTURE_LOG_DIRECTORY", invocationDirectory.toString());
         return environment;
     }
 
