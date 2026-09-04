@@ -39,7 +39,7 @@ class CompilerIntegrationFunctionalTest {
 
         List<List<String>> invocations = PlatformFixture.readInvocations(invocationLog);
         assertEquals(1, invocations.size());
-        assertEquals(List.of("javac", "--", "-Dfixture.jvm.argument=has a space"),
+        assertEquals(List.of("javac", "--", "-Xdefinitely-not-a-java-option"),
                 invocations.get(0).subList(0, 3));
         String argumentFile = invocations.get(0).get(3);
         assertTrue(argumentFile.startsWith("@"), invocations.toString());
@@ -301,7 +301,7 @@ class CompilerIntegrationFunctionalTest {
                 }
 
                 tasks.withType(JavaCompile).configureEach {
-                    options.forkOptions.jvmArgs.add('-Dfixture.jvm.argument=has a space')
+                    options.forkOptions.jvmArgs.add('-Xdefinitely-not-a-java-option')
                     options.compilerArgs.add('-Afixture.compiler.argument=has a space')
                 }
                 """.formatted(groovyQuote(projectDirectory.relativize(executable))));

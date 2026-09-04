@@ -69,6 +69,10 @@ public class ElideGradlePlugin implements Plugin<Project> {
             return configured == null ? List.of() : List.copyOf(configured);
         }));
         options.getForkOptions().getJvmArgumentProviders().add(arguments);
+        task.doFirst(ignored -> {
+            arguments.getForwardedJvmArguments().finalizeValue();
+            options.getForkOptions().setJvmArgs(List.of());
+        });
     }
 
     private static Path javaExecutable() {
