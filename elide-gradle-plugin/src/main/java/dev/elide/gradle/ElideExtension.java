@@ -134,10 +134,13 @@ public class ElideExtension implements ElideExtensionConfig {
         this.projectManifest = objects.fileProperty()
                 .convention(project.getLayout().getProjectDirectory().file("elide.pkl"));
 
-        var devRootProject = (USE_ROOT_FOR_DEPS ? activeProject.getRootProject() : activeProject);
         this.activeElideBin = objects.fileProperty();
-        this.activeDevRoot = objects.directoryProperty()
-                .convention(devRootProject.getLayout().getProjectDirectory().dir(DEFAULT_DEV_ROOT));
+        this.activeDevRoot = objects.directoryProperty();
+        if (USE_ROOT_FOR_DEPS) {
+            this.activeDevRoot.fileValue(new java.io.File(activeProject.getRootDir(), DEFAULT_DEV_ROOT));
+        } else {
+            this.activeDevRoot.convention(activeProject.getLayout().getProjectDirectory().dir(DEFAULT_DEV_ROOT));
+        }
 
         this.enableDebugMode = objects.property(Boolean.class).convention(false);
         this.enableVerboseMode = objects.property(Boolean.class).convention(false);

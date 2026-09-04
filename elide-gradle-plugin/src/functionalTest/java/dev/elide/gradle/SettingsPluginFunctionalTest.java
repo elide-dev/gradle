@@ -177,6 +177,33 @@ class SettingsPluginFunctionalTest {
         assertTrue(result.getOutput().contains("ELIDE_VERSION=project-version"), result.getOutput());
     }
 
+    @Test
+    void multiProjectConfigurationSupportsIsolatedProjects() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("isolated-projects");
+        Files.createDirectories(projectDirectory.resolve("one"));
+        Files.createDirectories(projectDirectory.resolve("two"));
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                plugins { id("dev.elide.settings") }
+                elide { runtime { version = "isolated-version" } }
+                include("one", "two")
+                """);
+        String projectBuild = """
+                plugins {
+                    base
+                    id("dev.elide")
+                }
+                elide { compiler = false }
+                """;
+        Files.writeString(projectDirectory.resolve("one/build.gradle.kts"), projectBuild);
+        Files.writeString(projectDirectory.resolve("two/build.gradle.kts"), projectBuild);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":one:tasks", ":two:tasks", "--isolated-projects", "--stacktrace")
+                .build();
+
+        assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
+    }
+
     private GradleRunner configuredRunner(Path projectDirectory) {
         return GradleRunner.create()
                 .withPluginClasspath()
