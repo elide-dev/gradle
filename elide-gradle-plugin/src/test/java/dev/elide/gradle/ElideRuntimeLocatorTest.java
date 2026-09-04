@@ -13,10 +13,12 @@ import static dev.elide.gradle.ElideRuntimeMode.AUTO;
 import static dev.elide.gradle.ElideRuntimeMode.MANAGED;
 import static dev.elide.gradle.ElideRuntimeMode.PATH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ElideRuntimeLocatorTest {
     private static final ElidePlatform LINUX = ElidePlatform.detect("Linux", "amd64");
+    private static final ElidePlatform WINDOWS = ElidePlatform.detect("Windows 11", "amd64");
 
     @TempDir
     Path tempDir;
@@ -98,6 +100,21 @@ class ElideRuntimeLocatorTest {
 
         assertThrows(IllegalStateException.class,
                 () -> locate(PATH, Optional.empty(), List.of(nonExecutable.getParent()), managed));
+    }
+
+    @Test
+    void windowsCandidatesAcceptRegularExeFilesWithoutUnixExecutablePermission() throws IOException {
+        Path executable = tempDir.resolve("path").resolve("elide.exe");
+        Files.createDirectories(executable.getParent());
+        Files.writeString(executable, "runtime");
+        assertFalse(Files.isExecutable(executable));
+        Path managed = tempDir.resolve("managed").resolve("elide.exe");
+
+        ElideRuntimeSelection selection = ElideRuntimeLocator.locate(
+                PATH, Optional.empty(), List.of(executable.getParent()), managed, WINDOWS);
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(executable, selection.executable());
     }
 
     private ElideRuntimeSelection locate(ElideRuntimeMode mode, Optional<Path> explicit,

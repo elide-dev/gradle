@@ -588,8 +588,8 @@ Document `AUTO`, `PATH`, and `MANAGED`; show exact Kotlin DSL examples:
 
 ```kotlin
 elide {
-    runtimeMode = ElideRuntimeMode.MANAGED
-    runtimeVersion = "1.5.1+20260903"
+    runtimeMode.set(ElideRuntimeMode.MANAGED)
+    runtimeVersion.set("1.5.1+20260903")
 }
 ```
 

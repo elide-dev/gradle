@@ -30,8 +30,8 @@ For example, select and pin the managed runtime in the consumer build script bef
 import dev.elide.gradle.ElideRuntimeMode
 
 elide {
-    runtimeMode = ElideRuntimeMode.MANAGED
-    runtimeVersion = "1.5.1+20260903"
+    runtimeMode.set(ElideRuntimeMode.MANAGED)
+    runtimeVersion.set("1.5.1+20260903")
 }
 ```
 
@@ -82,7 +82,9 @@ For example, the pinned Linux amd64 executable is:
 
 The runtime directory contains the extracted distribution and `.complete`, whose contents are the verified archive
 SHA-256. A cache hit requires a parseable completion marker and the expected regular executable (`bin/elide` or
-`bin/elide.exe`). Builds coordinate preparation with the sibling `<platform>.lock`, so concurrent builds do not publish
+`bin/elide.exe`); Unix entries also require executable permission, while Windows accepts a regular `.exe` file. If a Unix
+cache entry loses its execute bit, preparation reacquires the platform lock and repairs the verified executable without
+downloading again. Builds coordinate preparation with the sibling `<platform>.lock`, so concurrent builds do not publish
 partial runtime directories.
 
 To force a fresh download, stop builds using the cache and remove only the exact version/platform directory. The matching
@@ -101,7 +103,7 @@ Elide runtime version <version> is not cached at <GRADLE_USER_HOME>/caches/dev.e
 ```
 
 The remedy is to run a connected build once (for example, `./gradlew prepareElideRuntime` after configuring
-`runtimeMode = ElideRuntimeMode.MANAGED` in the build script), then rerun with `--offline`, or choose `PATH`/`elideBin` for
+`runtimeMode.set(ElideRuntimeMode.MANAGED)` in the build script), then rerun with `--offline`, or choose `PATH`/`elideBin` for
 an installed runtime. `PATH` mode has a hard managed-runtime network guarantee: it never downloads a managed runtime
 archive or checksum, never extracts that archive, and never registers a managed preparation task. If `enableInstall` is
 enabled, its separate `elide install` task may still resolve project dependencies. If no usable executable is found, it

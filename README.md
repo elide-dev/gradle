@@ -30,7 +30,7 @@ plugins {
 }
 
 elide {
-    enableJavaCompiler = true
+    enableJavaCompiler.set(true)
 }
 ```
 
@@ -56,8 +56,8 @@ release when that release publishes a matching asset.
 import dev.elide.gradle.ElideRuntimeMode
 
 elide {
-    runtimeMode = ElideRuntimeMode.MANAGED
-    runtimeVersion = "1.5.1+20260903"
+    runtimeMode.set(ElideRuntimeMode.MANAGED)
+    runtimeVersion.set("1.5.1+20260903")
 }
 ```
 
@@ -67,8 +67,8 @@ For a local or non-standard executable, configure `elideBin` explicitly:
 import dev.elide.gradle.ElideRuntimeMode
 
 elide {
-    runtimeMode = ElideRuntimeMode.PATH
-    elideBin = layout.projectDirectory.file("tools/elide")
+    runtimeMode.set(ElideRuntimeMode.PATH)
+    elideBin.set(layout.projectDirectory.file("tools/elide"))
 }
 ```
 
@@ -78,15 +78,15 @@ old manual `elide-javac` setup.
 
 ### Dependency installation
 
-Set `enableInstall = true` to run `elide install` before Java compilation. When Maven integration is enabled, the plugin
+Set `enableInstall.set(true)` to run `elide install` before Java compilation. When Maven integration is enabled, the plugin
 adds the generated `.dev/dependencies/m2` repository for dependency resolution. The manifest defaults to `elide.pkl` and
 can be changed with `manifest`:
 
 ```kotlin
 elide {
-    enableInstall = true
-    enableMavenIntegration = true
-    manifest = layout.projectDirectory.file("elide.pkl")
+    enableInstall.set(true)
+    enableMavenIntegration.set(true)
+    manifest.set(layout.projectDirectory.file("elide.pkl"))
 }
 ```
 

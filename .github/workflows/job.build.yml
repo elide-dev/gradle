@@ -96,6 +96,15 @@ jobs:
           java -version
           "$JAVA17_HOME/bin/java" -version
           gradle -Dorg.gradle.java.installations.paths="$JAVA17_HOME" --no-daemon -q javaToolchains
-      - name: "Build: Projects"
+      - name: "Build: Java 17 baseline"
         working-directory: .
         run: gradle -Dorg.gradle.java.installations.paths="$JAVA17_HOME" --stacktrace --info --no-daemon build compatibilityTest
+      - name: "Build: Current consumer pair"
+        working-directory: .
+        run: |
+          java -version
+          printf 'Current JAVA_HOME: %s\n' "$JAVA_HOME"
+          gradle -Dorg.gradle.java.installations.paths="$JAVA_HOME" --stacktrace --info --no-daemon \
+            currentToolchainConsumerTest \
+            -Pelide.currentToolchain.java=${{ matrix.java }} \
+            -Pelide.currentToolchain.gradle=${{ matrix.gradle-version }}

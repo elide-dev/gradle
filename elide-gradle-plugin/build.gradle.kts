@@ -64,13 +64,19 @@ configurations[functionalTest.implementationConfigurationName].extendsFrom(confi
 configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
 
 val compatibilityTest: SourceSet by sourceSets.creating
+val currentToolchainTest: SourceSet by sourceSets.creating
 val realRuntimeSmokeSourceSet = sourceSets.create("realRuntimeSmoke")
-gradlePlugin.testSourceSets(functionalTest, compatibilityTest, realRuntimeSmokeSourceSet)
+gradlePlugin.testSourceSets(functionalTest, compatibilityTest, currentToolchainTest, realRuntimeSmokeSourceSet)
 
 configurations[compatibilityTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
 configurations[compatibilityTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
 compatibilityTest.compileClasspath += functionalTest.output
 compatibilityTest.runtimeClasspath += functionalTest.output
+
+configurations[currentToolchainTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[currentToolchainTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+currentToolchainTest.compileClasspath += functionalTest.output
+currentToolchainTest.runtimeClasspath += functionalTest.output
 
 configurations[realRuntimeSmokeSourceSet.implementationConfigurationName]
     .extendsFrom(configurations.testImplementation.get())
@@ -80,6 +86,7 @@ configurations[realRuntimeSmokeSourceSet.runtimeOnlyConfigurationName]
 dependencies {
     add(functionalTest.implementationConfigurationName, gradleTestKit())
     add(compatibilityTest.implementationConfigurationName, gradleTestKit())
+    add(currentToolchainTest.implementationConfigurationName, gradleTestKit())
     add(realRuntimeSmokeSourceSet.implementationConfigurationName, gradleTestKit())
 }
 
@@ -96,6 +103,35 @@ val compatibilityTestTask = tasks.register<Test>("compatibilityTest") {
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(17))
     })
+}
+
+val requestedCurrentToolchainJava = providers.gradleProperty("elide.currentToolchain.java")
+val requestedCurrentToolchainGradle = providers.gradleProperty("elide.currentToolchain.gradle")
+val currentToolchainJava = requestedCurrentToolchainJava.orNull.orEmpty()
+val currentToolchainGradle = requestedCurrentToolchainGradle.orNull.orEmpty()
+val currentToolchainPairs = mapOf("24" to "8.14.5", "26" to "9.7.1")
+val currentToolchainLauncher = javaToolchains.launcherFor {
+    languageVersion.set(requestedCurrentToolchainJava.map { JavaLanguageVersion.of(it.toInt()) }
+        .orElse(JavaLanguageVersion.of(17)))
+}
+
+val currentToolchainConsumerTest = tasks.register<Test>("currentToolchainConsumerTest") {
+    group = "verification"
+    description = "Runs the requested Gradle/JDK consumer pair outside the Java 17 compatibility baseline."
+    testClassesDirs = currentToolchainTest.output.classesDirs
+    classpath = currentToolchainTest.runtimeClasspath
+    javaLauncher.set(currentToolchainLauncher)
+    inputs.property("elide.currentToolchain.java", currentToolchainJava)
+    inputs.property("elide.currentToolchain.gradle", currentToolchainGradle)
+    systemProperty("elide.currentToolchain.java", currentToolchainJava)
+    systemProperty("elide.currentToolchain.gradle", currentToolchainGradle)
+    doFirst {
+        check(currentToolchainPairs[currentToolchainJava] == currentToolchainGradle) {
+            "currentToolchainConsumerTest requires one of " +
+                    "-Pelide.currentToolchain.java=24 -Pelide.currentToolchain.gradle=8.14.5 or " +
+                    "-Pelide.currentToolchain.java=26 -Pelide.currentToolchain.gradle=9.7.1"
+        }
+    }
 }
 
 val requestedSmokeRuntimeMode = providers.gradleProperty("elide.runtime.mode").orElse("MANAGED")

@@ -11,9 +11,13 @@ is Gradle 9.7.1 for developing and verifying this project; it is not the minimum
 | 8.14.5 | Java 17, Java 24 | Current Gradle 8 lane |
 | 9.7.1 | Java 17, Java 26 | Repository wrapper/current Gradle 9 lane |
 
-Java 17 is the published bytecode and compatibility baseline. The plugin is exercised with TestKit against the literal
-Gradle versions above, independently of the JDK used to run the repository's own wrapper. Consumers should use their
-normal Gradle wrapper and do not need to upgrade to Gradle 9.7.1 solely because this repository does.
+Java 17 is the published bytecode and compatibility baseline. `compatibilityTest` always launches its literal Gradle
+7.6.4, 8.14.5, and 9.7.1 TestKit consumers on Java 17, independently of the JDK used to run the repository's own wrapper.
+The opt-in `currentToolchainConsumerTest` covers the Java 24/Gradle 8.14.5 and Java 26/Gradle 9.7.1 pairs; it is not part
+of normal `build` or `check` and requires the matching JDK plus
+`-Pelide.currentToolchain.java=<version> -Pelide.currentToolchain.gradle=<version>`. CI supplies that JDK as both the
+test JVM and nested consumer `JAVA_HOME`, then logs and asserts the nested Java and Gradle versions. Consumers should use
+their normal Gradle wrapper and do not need to upgrade to Gradle 9.7.1 solely because this repository does.
 
 Linux, macOS, and Windows are first-class plugin platforms. Managed assets for the pinned `1.5.1+20260903` release are
 Linux amd64/arm64 TGZ, macOS arm64 TGZ, and Windows amd64 ZIP. The release has no macOS amd64 asset; Intel macOS users
@@ -30,7 +34,7 @@ cache contract.
    import dev.elide.gradle.ElideRuntimeMode
 
    elide {
-       runtimeMode = ElideRuntimeMode.AUTO
+       runtimeMode.set(ElideRuntimeMode.AUTO)
    }
    ```
 
@@ -42,8 +46,8 @@ cache contract.
    import dev.elide.gradle.ElideRuntimeMode
 
    elide {
-       runtimeMode = ElideRuntimeMode.MANAGED
-       runtimeVersion = "1.5.1+20260903"
+       runtimeMode.set(ElideRuntimeMode.MANAGED)
+       runtimeVersion.set("1.5.1+20260903")
    }
    ```
 

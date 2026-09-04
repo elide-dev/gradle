@@ -42,6 +42,12 @@ public abstract class ElideExecTask extends DefaultTask {
     private static final String WITHHELD_OUTPUT_MARKER = "[Captured output withheld: environment values exceed the "
             + "redaction-safe capture bound]";
     private static final RedactionPolicy REDACTION_POLICY = RedactionPolicy.create();
+    private final ExecOperations execOperations;
+
+    @Inject
+    public ElideExecTask(ExecOperations execOperations) {
+        this.execOperations = execOperations;
+    }
 
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
@@ -70,8 +76,10 @@ public abstract class ElideExecTask extends DefaultTask {
     @OutputDirectory
     public abstract DirectoryProperty getGeneratedDependencyRepository();
 
-    @Inject
-    protected abstract ExecOperations getExecOperations();
+    @Internal
+    protected ExecOperations getExecOperations() {
+        return execOperations;
+    }
 
     @TaskAction
     public void executeElide() {

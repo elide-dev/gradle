@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpServer;
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
@@ -18,6 +20,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -120,6 +123,41 @@ class ManagedRuntimeFunctionalTest {
                     .build();
 
             assertTrue(offline.getOutput().contains("BUILD SUCCESSFUL"));
+            assertEquals(2, server.requests().size());
+        }
+    }
+
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void repairsLostUnixExecutablePermissionOnACompletedCacheHit() throws Exception {
+        FixturePlatform platform = currentPlatform();
+        Path projectDirectory = temporaryDirectory.resolve("permission-repair-project");
+        Path gradleUserHome = temporaryDirectory.resolve("permission-repair-gradle-user-home");
+        byte[] archive = fixtureArchive(platform, temporaryDirectory.resolve("permission-repair.log"));
+        try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
+            writeProject(projectDirectory, gradleUserHome, platform, temporaryDirectory.resolve("permission-repair.log"));
+            runner(projectDirectory, gradleUserHome)
+                    .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                            "verifyManagedRuntime", releaseBaseUriArgument(server))
+                    .build();
+
+            Path executable = runtimeDirectory(gradleUserHome, platform)
+                    .resolve("bin")
+                    .resolve(platform.executableName());
+            Files.setPosixFilePermissions(executable, Set.of(
+                    java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+                    java.nio.file.attribute.PosixFilePermission.GROUP_READ,
+                    java.nio.file.attribute.PosixFilePermission.OTHERS_READ));
+            assertFalse(Files.isExecutable(executable));
+
+            BuildResult repaired = runner(projectDirectory, gradleUserHome)
+                    .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                            "verifyManagedRuntime", releaseBaseUriArgument(server))
+                    .build();
+
+            assertTrue(repaired.getOutput().contains("BUILD SUCCESSFUL"), repaired.getOutput());
+            assertTrue(Files.isExecutable(executable));
             assertEquals(2, server.requests().size());
         }
     }

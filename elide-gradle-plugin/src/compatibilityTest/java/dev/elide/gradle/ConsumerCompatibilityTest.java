@@ -2,6 +2,7 @@ package dev.elide.gradle;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -45,6 +46,29 @@ class ConsumerCompatibilityTest {
         assertEquals(List.of("javac", "--"), invocations.get(0).subList(0, 2));
     }
 
+    @Test
+    void kotlinDslConsumerUsesPropertySetSyntaxOnGradle764() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("kotlin-gradle-7.6.4");
+        Path invocationDirectory = projectDirectory.resolve("elide-invocations");
+        Path fixtureClassPath = projectDirectory.resolve("elide-fixture-classes");
+        Path executable = PlatformFixture.writeJavaRuntimeFixture(fixtureClassPath);
+        writeKotlinConsumerProject(projectDirectory, executable);
+
+        BuildResult result = GradleRunner.create()
+                .withGradleVersion("7.6.4")
+                .withPluginClasspath()
+                .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(projectDirectory.resolve("test-kit").toFile())
+                .withEnvironment(isolatedEnvironment(projectDirectory, fixtureClassPath, invocationDirectory))
+                .withArguments("help", "compileJava", "--stacktrace")
+                .build();
+
+        assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
+        List<List<String>> invocations = PlatformFixture.readInvocations(invocationDirectory);
+        assertEquals(1, invocations.size());
+        assertEquals(List.of("javac", "--"), invocations.get(0).subList(0, 2));
+    }
+
     private static void writeConsumerProject(Path projectDirectory, Path executable) throws IOException {
         Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
         Files.writeString(projectDirectory.resolve("settings.gradle"), "rootProject.name = 'consumer-compatibility'\n");
@@ -65,6 +89,31 @@ class ConsumerCompatibilityTest {
                 """.formatted(groovyQuote(executable)));
     }
 
+    private static void writeKotlinConsumerProject(Path projectDirectory, Path executable) throws IOException {
+        Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), "rootProject.name = \"consumer-compatibility\"\n");
+        Files.writeString(projectDirectory.resolve("src/main/java/example/Consumer.java"), """
+                package example;
+                public final class Consumer { }
+                """);
+        Files.writeString(projectDirectory.resolve("build.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins {
+                    java
+                    id("dev.elide")
+                }
+
+                elide {
+                    runtimeMode.set(ElideRuntimeMode.PATH)
+                    runtimeVersion.set("fixture-1.0")
+                    elideBin.set(file("%s"))
+                    enableInstall.set(false)
+                    enableJavaCompiler.set(true)
+                }
+                """.formatted(kotlinQuote(executable)));
+    }
+
     private static Map<String, String> isolatedEnvironment(
             Path projectDirectory, Path fixtureClassPath, Path invocationDirectory) {
         Path javaHome = Path.of(System.getProperty("java.home"));
@@ -79,5 +128,9 @@ class ConsumerCompatibilityTest {
 
     private static String groovyQuote(Path path) {
         return path.toString().replace("\\", "\\\\").replace("'", "\\'");
+    }
+
+    private static String kotlinQuote(Path path) {
+        return path.toString().replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$");
     }
 }

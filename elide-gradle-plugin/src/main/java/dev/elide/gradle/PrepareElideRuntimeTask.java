@@ -34,6 +34,11 @@ import java.util.UUID;
 /** Prepares one checksum-verified Elide distribution in Gradle User Home. */
 @DisableCachingByDefault(because = "The runtime cache is shared between independent builds.")
 public abstract class PrepareElideRuntimeTask extends DefaultTask {
+    @Inject
+    public PrepareElideRuntimeTask() {
+        getOutputs().upToDateWhen(ignored -> cacheEntryIsComplete());
+    }
+
     @Input
     public abstract Property<String> getRuntimeVersion();
 
@@ -77,14 +82,16 @@ public abstract class PrepareElideRuntimeTask extends DefaultTask {
     }
 
     private void prepareWhileLocked(Path runtimeDirectory) throws IOException, InterruptedException {
-        ElidePlatform platform = new ElidePlatform(
-                getPlatformOs().get(),
-                getPlatformArch().get(),
-                getArchiveExtension().get(),
-                getExecutableName().get());
+        ElidePlatform platform = platform();
         Path executable = runtimeDirectory.resolve("bin").resolve(platform.executableName());
         if (isComplete(runtimeDirectory, executable)) {
             return;
+        }
+        if (hasValidMarkerAndRegularExecutable(runtimeDirectory, executable)) {
+            validateExecutable(executable, platform);
+            if (isComplete(runtimeDirectory, executable)) {
+                return;
+            }
         }
         if (getOffline().get()) {
             throw new GradleException("Elide runtime version " + getRuntimeVersion().get()
@@ -115,6 +122,27 @@ public abstract class PrepareElideRuntimeTask extends DefaultTask {
     }
 
     private boolean isComplete(Path runtimeDirectory, Path executable) {
+        if (!hasValidMarkerAndRegularExecutable(runtimeDirectory, executable)) {
+            return false;
+        }
+        return getPlatformOs().get().equals("windows") || Files.isExecutable(executable);
+    }
+
+    private boolean cacheEntryIsComplete() {
+        Path runtimeDirectory = getRuntimeDirectory().get().getAsFile().toPath();
+        Path executable = runtimeDirectory.resolve("bin").resolve(getExecutableName().get());
+        return isComplete(runtimeDirectory, executable);
+    }
+
+    private ElidePlatform platform() {
+        return new ElidePlatform(
+                getPlatformOs().get(),
+                getPlatformArch().get(),
+                getArchiveExtension().get(),
+                getExecutableName().get());
+    }
+
+    private static boolean hasValidMarkerAndRegularExecutable(Path runtimeDirectory, Path executable) {
         Path complete = runtimeDirectory.resolve(".complete");
         if (!Files.isRegularFile(complete, LinkOption.NOFOLLOW_LINKS)
                 || !Files.isRegularFile(executable, LinkOption.NOFOLLOW_LINKS)) {
