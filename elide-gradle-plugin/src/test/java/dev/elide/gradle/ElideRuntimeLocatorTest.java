@@ -1,11 +1,14 @@
 package dev.elide.gradle;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.List;
 import java.util.Optional;
 
@@ -92,10 +95,12 @@ class ElideRuntimeLocatorTest {
     }
 
     @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
     void unixCandidatesMustBeExecutableRegularFiles() throws IOException {
         var nonExecutable = tempDir.resolve("path").resolve("elide");
         Files.createDirectories(nonExecutable.getParent());
         Files.writeString(nonExecutable, "runtime");
+        Files.setPosixFilePermissions(nonExecutable, PosixFilePermissions.fromString("rw-r--r--"));
         var managed = tempDir.resolve("managed").resolve("elide");
 
         assertThrows(IllegalStateException.class,
@@ -103,10 +108,12 @@ class ElideRuntimeLocatorTest {
     }
 
     @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
     void windowsCandidatesAcceptRegularExeFilesWithoutUnixExecutablePermission() throws IOException {
         Path executable = tempDir.resolve("path").resolve("elide.exe");
         Files.createDirectories(executable.getParent());
         Files.writeString(executable, "runtime");
+        Files.setPosixFilePermissions(executable, PosixFilePermissions.fromString("rw-r--r--"));
         assertFalse(Files.isExecutable(executable));
         Path managed = tempDir.resolve("managed").resolve("elide.exe");
 
