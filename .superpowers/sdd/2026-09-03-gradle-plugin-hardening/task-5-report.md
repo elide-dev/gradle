@@ -278,4 +278,75 @@ Result: exit 0.
 - Capture remains bounded: its retained raw suffix is limited to the largest environment value needed to complete a match, and only the redacted first 64 KiB can enter a diagnostic.
 - Process-start exceptions cannot escape the structured/redacted error path. A numeric exit-code marker avoids a one-character inherited environment value masking the required status.
 - The native batch script now distinguishes an empty `""` argument from the exhausted argument list. The Windows-only functional assertion is deliberately conditional; the macOS test asserts the batch syntax rather than pretending it was executed.
+
+---
+
+## Review-fix round 3: literal diagnostics, fixed capture bounds, and direct Windows execution
+
+### Implementation
+
+- Built process diagnostics from literal labels plus individually redacted untrusted values. The numeric exit status is appended structurally after redaction, so an inherited value such as `ELIDE_EXIT_CODE` or `x` cannot corrupt `executable`, `working directory`, `exit code`, or the status itself.
+- Replaced environment-sized capture storage with fixed limits: at most 64 KiB of rendered output, a fixed 3 KiB raw look-ahead, and fixed redaction metadata (at most 256 non-empty values, each at most 1,024 Java characters / 3 KiB UTF-8). If the inherited environment exceeds those safe metadata limits, the task withholds captured child output rather than risking a partial secret at a boundary. Both standard streams use the same fixed policy.
+- Kept look-ahead sufficient to redact a permitted environment value that starts at the visible 64-KiB boundary. Redaction-marker rendering itself is capped at the visible bound, then reports a fixed truncation marker.
+- Removed the explicit `cmd.exe /c` batch-script branch. `ExecOperations` now receives the configured executable and argument list directly, so Task 5 does not compose a raw command-interpreter command from an executable path or user-supplied compiler arguments. Native `elide.exe` remains the Windows production executable.
+- Added focused diagnostics/capture regressions and a Windows-only native fixture regression with `%`, `&`, `|`, `<`, `>`, and `^` in one argument. The Windows test records individual argv elements and verifies the exact list without simulating a Windows launcher on macOS.
+
+### TDD evidence
+
+#### RED
+
+The following focused tests were added before the round-3 implementation:
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.preservesLiteralDiagnosticContextWhenEnvironmentValuesMatchLabels --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.withholdsCapturedOutputWhenAnEnvironmentValueExceedsTheFixedSafeBound --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.executesWindowsNativeArgumentsDirectlyWithoutTheCommandInterpreter --no-configuration-cache
+```
+
+Before the implementation, the literal-context case rendered corrupt labels (`e[redacted]ecutable` / `e[redacted]it`) and lost the required status because `ELIDE_EXIT_CODE` was redacted as a sentinel. The oversized-value case rendered redacted child output instead of the explicit withheld-output diagnostic. The original batch route also sent the configured executable and arguments through `cmd.exe /c`; the initial macOS `-Dos.name=Windows` simulation proved invalid because it causes Gradle to select a Windows process launcher on a non-Windows host. The final hostile-argument regression is therefore conditionally executed only on a real Windows runner.
+
+#### GREEN
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.preservesLiteralDiagnosticContextWhenEnvironmentValuesMatchLabels --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.redactsAnEnvironmentValueThatCrossesTheCaptureBoundary --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.withholdsCapturedOutputWhenAnEnvironmentValueExceedsTheFixedSafeBound --tests dev.elide.gradle.CompilerIntegrationFunctionalTest.executesWindowsNativeArgumentsDirectlyWithoutTheCommandInterpreter --no-configuration-cache
+```
+
+Result: `BUILD SUCCESSFUL in 5s`. The three runnable regressions passed on macOS; the native-Windows argv regression was skipped by its OS condition and is ready for the Windows matrix. The existing boundary regression still passed, confirming that bounded look-ahead redacts a secret spanning the 64-KiB visible edge.
+
+### Verification
+
+```text
+./gradlew :elide-gradle-plugin:test :elide-gradle-plugin:functionalTest --configuration-cache
+```
+
+Result: the unit and functional task graph completed successfully and stored its configuration-cache entry. The subsequent identical invocation reported `Configuration cache entry reused.`
+
+```text
+./gradlew :elide-gradle-plugin:functionalTest --configuration-cache
+./gradlew :elide-gradle-plugin:functionalTest --configuration-cache
+```
+
+Result: both commands completed successfully; the second reported `Configuration cache entry reused.`
+
+```text
+git diff --check
+```
+
+Result: exit 0.
+
+### Files changed in this round
+
+- `elide-gradle-plugin/src/main/java/dev/elide/gradle/ElideExecTask.java`
+- `elide-gradle-plugin/src/functionalTest/java/dev/elide/gradle/CompilerIntegrationFunctionalTest.java`
+
+### Self-review
+
+- Required diagnostic context is literal and cannot be changed by replacement of an environment value; executable and working-directory values, exception text, stdout, and stderr remain individually redacted.
+- Exit code uses no redactable placeholder. The `ELIDE_EXIT_CODE`/`x` regression verifies both the old sentinel collision and broad-label collision.
+- Capture allocation is bounded independently of the count and size of inherited values. Oversized values cause withholding before their bytes are copied into capture metadata or buffers, avoiding integer-overflow arithmetic and boundary-prefix disclosure.
+- The generated output still excludes environment maps and all normal functional tests use fixtures. No fake `JAVA_HOME`, real Elide runtime, ambient developer `PATH`, or external network was introduced.
+- Removing the explicit command interpreter prevents Task 5 from raw-concatenating user values into a `cmd.exe /c` string. The actual Windows regression is platform-native rather than an `os.name` spoof.
+
+### Concerns
+
+- The hostile-argument execution assertion requires the planned Windows CI runner; it is correctly conditional and was not represented as executed on this macOS host. The test uses the shared native Windows fixture and records exact individual argv values when that matrix runs.
+- The repository continues to emit pre-existing restricted-native-access, Java-installation-path, and Gradle deprecation warnings. They did not cause test or configuration-cache failures.
 - Fixture setup no longer creates generated Maven output. The fake installers do, while no normal test uses a real Elide executable, real network, or developer `PATH`.
