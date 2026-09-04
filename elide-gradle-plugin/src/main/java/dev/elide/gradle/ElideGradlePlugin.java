@@ -5,6 +5,7 @@ import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.JavaCompile;
+import org.gradle.api.provider.Provider;
 
 import java.io.File;
 import java.net.URISyntaxException;
@@ -20,7 +21,17 @@ public class ElideGradlePlugin implements Plugin<Project> {
 
     @Override
     public void apply(Project project) {
-        ElideExtension extension = new ElideExtension(project, project.getObjects());
+        Provider<ElideBuildConfiguration> buildConfiguration = project.getGradle().getSharedServices()
+                .registerIfAbsent(
+                        ElideBuildConfiguration.SERVICE_NAME,
+                        ElideBuildConfiguration.class,
+                        service -> {
+                            service.getMaxParallelUsages().set(1);
+                            service.getParameters().getRuntimeMode().set(ElideRuntimeMode.AUTO);
+                            service.getParameters().getVersionSource().set(ElideVersionSource.DEFAULT);
+                            service.getParameters().getRuntimeVersion().set(ElideExtension.DEFAULT_RUNTIME_VERSION);
+                        });
+        ElideExtension extension = new ElideExtension(project, project.getObjects(), buildConfiguration);
         project.getExtensions().add(ELIDE_EXTENSION_NAME, extension);
 
         project.afterEvaluate(ignored -> configure(project, extension));

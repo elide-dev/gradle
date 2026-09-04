@@ -46,6 +46,137 @@ class SettingsPluginFunctionalTest {
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
     }
 
+    @Test
+    void optedInProjectInheritsSettingsWhileSiblingRemainsUntouched() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("multi-project");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("plain"));
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins {
+                    id("dev.elide.settings")
+                }
+
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.MANAGED
+                        version = "settings-version"
+                    }
+                }
+
+                include("app", "plain")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins {
+                    base
+                    id("dev.elide")
+                }
+
+                elide {
+                    install = true
+                    compiler = false
+                }
+
+                tasks.register("printElideConfiguration") {
+                    doLast {
+                        println("ELIDE_MODE=${elide.runtimeMode.get()}")
+                        println("ELIDE_VERSION=${elide.runtimeVersion.get()}")
+                        println("ELIDE_INSTALL=${elide.install}")
+                    }
+                }
+                """);
+        Files.writeString(projectDirectory.resolve("plain/build.gradle.kts"), """
+                plugins { base }
+                check(extensions.findByName("elide") == null)
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":app:printElideConfiguration", ":plain:tasks", "--stacktrace")
+                .build();
+
+        assertTrue(result.getOutput().contains("ELIDE_MODE=MANAGED"), result.getOutput());
+        assertTrue(result.getOutput().contains("ELIDE_VERSION=settings-version"), result.getOutput());
+        assertTrue(result.getOutput().contains("ELIDE_INSTALL=true"), result.getOutput());
+    }
+
+    @Test
+    void optedInProjectResolvesRuntimeVersionFromCatalog() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("catalog-version");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                elide = "catalog-version"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins {
+                    id("dev.elide.settings")
+                }
+
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.MANAGED
+                        versionFrom("libs", "elide")
+                    }
+                }
+
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins {
+                    base
+                    id("dev.elide")
+                }
+
+                elide { compiler = false }
+
+                tasks.register("printElideVersion") {
+                    doLast { println("ELIDE_VERSION=${elide.runtimeVersion.get()}") }
+                }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":app:printElideVersion", "--stacktrace")
+                .build();
+
+        assertTrue(result.getOutput().contains("ELIDE_VERSION=catalog-version"), result.getOutput());
+    }
+
+    @Test
+    void cleanProjectRuntimeDslOverridesSettingsConvention() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("project-override");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                plugins { id("dev.elide.settings") }
+                elide { runtime { version = "settings-version" } }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins {
+                    base
+                    id("dev.elide")
+                }
+
+                elide {
+                    compiler = false
+                    runtime { version = "project-version" }
+                }
+
+                tasks.register("printElideVersion") {
+                    doLast { println("ELIDE_VERSION=${elide.runtime.version}") }
+                }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":app:printElideVersion", "--stacktrace")
+                .build();
+
+        assertTrue(result.getOutput().contains("ELIDE_VERSION=project-version"), result.getOutput());
+    }
+
     private GradleRunner configuredRunner(Path projectDirectory) {
         return GradleRunner.create()
                 .withPluginClasspath()

@@ -1,6 +1,7 @@
 package dev.elide.gradle;
 
 import org.gradle.api.Project;
+import org.gradle.api.Action;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.file.RegularFileProperty;
@@ -14,6 +15,7 @@ import org.gradle.api.tasks.PathSensitivity;
 import java.nio.file.Path;
 
 public class ElideExtension implements ElideExtensionConfig {
+    static final String DEFAULT_RUNTIME_VERSION = "1.5.1+20260903";
     private static final boolean USE_ROOT_FOR_DEPS = true;
     private static final String DEFAULT_DEV_ROOT = ".dev";
     protected Project activeProject;
@@ -32,6 +34,7 @@ public class ElideExtension implements ElideExtensionConfig {
     protected Property<Boolean> doResolveElideFromPath;
     protected Property<Boolean> enableDebugMode;
     protected Property<Boolean> enableVerboseMode;
+    private final ElideProjectRuntimeSettings runtime;
     @PathSensitive(PathSensitivity.RELATIVE) protected RegularFileProperty projectManifest;
     @PathSensitive(PathSensitivity.ABSOLUTE) protected RegularFileProperty activeElideBin;
     @PathSensitive(PathSensitivity.RELATIVE) protected DirectoryProperty activeDevRoot;
@@ -113,15 +116,20 @@ public class ElideExtension implements ElideExtensionConfig {
         return activeDevRoot.file("elide.lock.bin");
     }
 
-    ElideExtension(Project project, ObjectFactory objects) {
+    ElideExtension(
+            Project project,
+            ObjectFactory objects,
+            Provider<ElideBuildConfiguration> buildConfiguration) {
         this.activeProject = project;
         this.doEnableInstall = objects.property(Boolean.class).convention(enableInstall);
         this.doEmbeddedBuild = objects.property(Boolean.class).convention(useBuildEmbedded);
         this.doUseMavenIntegration = objects.property(Boolean.class).convention(enableMavenIntegration);
         this.doEnableProjects = objects.property(Boolean.class).convention(enableProjectIntegration);
         this.doEnableJavaCompiler = objects.property(Boolean.class).convention(enableJavacIntegration);
-        this.doRuntimeMode = objects.property(ElideRuntimeMode.class).convention(ElideRuntimeMode.AUTO);
-        this.doRuntimeVersion = objects.property(String.class).convention("1.5.1+20260903");
+        this.doRuntimeMode = objects.property(ElideRuntimeMode.class).convention(
+                buildConfiguration.flatMap(service -> service.getParameters().getRuntimeMode()));
+        this.doRuntimeVersion = objects.property(String.class).convention(
+                ElideVersionResolver.resolve(project, buildConfiguration, DEFAULT_RUNTIME_VERSION));
         this.doResolveElideFromPath = objects.property(Boolean.class);
         this.projectManifest = objects.fileProperty()
                 .convention(project.getLayout().getProjectDirectory().file("elide.pkl"));
@@ -134,5 +142,50 @@ public class ElideExtension implements ElideExtensionConfig {
         this.enableDebugMode = objects.property(Boolean.class).convention(false);
         this.enableVerboseMode = objects.property(Boolean.class).convention(false);
         this.activeLockfile = objects.fileProperty().convention(resolveLockfilePath());
+        this.runtime = new ElideProjectRuntimeSettings(doRuntimeMode, doRuntimeVersion, activeElideBin);
+    }
+
+    public ElideProjectRuntimeSettings getRuntime() {
+        return runtime;
+    }
+
+    public void runtime(Action<? super ElideProjectRuntimeSettings> action) {
+        action.execute(runtime);
+    }
+
+    public boolean getInstall() {
+        return getEnableInstall().get();
+    }
+
+    public void setInstall(boolean value) {
+        getEnableInstall().set(value);
+    }
+
+    public void install(Provider<Boolean> value) {
+        getEnableInstall().set(value);
+    }
+
+    public boolean getCompiler() {
+        return getEnableJavaCompiler().get();
+    }
+
+    public void setCompiler(boolean value) {
+        getEnableJavaCompiler().set(value);
+    }
+
+    public void compiler(Provider<Boolean> value) {
+        getEnableJavaCompiler().set(value);
+    }
+
+    public boolean getMaven() {
+        return getEnableMavenIntegration().get();
+    }
+
+    public void setMaven(boolean value) {
+        getEnableMavenIntegration().set(value);
+    }
+
+    public void maven(Provider<Boolean> value) {
+        getEnableMavenIntegration().set(value);
     }
 }
