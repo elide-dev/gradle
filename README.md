@@ -36,8 +36,8 @@ elide {
 
 Applying the plugin only registers Gradle configuration and task wiring. It does not download or execute Elide, and it
 does not create or modify any file in `JAVA_HOME`. Managed preparation is registered for a managed selection and runs
-when `prepareElideRuntime` is invoked directly or when a consuming task depends on it. Java compilation invokes the
-selected Elide executable directly as `elide javac -- ...`; no `elide-javac` launcher is required.
+when `prepareElideRuntime` is invoked directly or when a consuming task depends on it. Java compilation launches the
+selected executable as `elide javac -- ...` through a small Java entry point; no `elide-javac` shim is required.
 
 ### Runtime selection
 
@@ -96,9 +96,34 @@ project directory; failures identify the executable, working directory, exit cod
 ### What this plugin does
 
 [Elide](https://elide.dev) is a native toolchain that includes a `javac` replacement and Maven-compatible dependency
-resolution. When enabled, this plugin configures Gradle's `JavaCompile` tasks to fork Elide directly and optionally
+resolution. When enabled, this plugin configures Gradle's `JavaCompile` tasks to launch Elide and optionally
 populates a local Maven repository through `elide install`. Gradle still owns task scheduling, inputs, outputs, and
 dependency resolution semantics outside the opt-in Elide integration.
 
 The repository publishes a Gradle plugin and a version catalog. The project build and published plugin classes are
 covered by the compatibility matrix in [docs/compatibility.md](docs/compatibility.md).
+
+### Run the local example
+
+With a JDK 17 or newer installed, run:
+
+```bash
+cd example-project
+./gradlew clean build run
+```
+
+The example uses the plugin from this checkout, compiles with Elide, and prints `Hello, World!`. Gradle resolves Guava
+and its transitive dependencies from Maven Central and targets Java 17 bytecode. Configuration caching is enabled. No
+manual `elide install` is needed; if Elide is absent from PATH, the plugin prepares the pinned managed runtime. After the first successful build,
+`./gradlew clean build run --offline` can reuse the downloaded dependencies and runtime.
+
+The greeting uses Guava's `SettableFuture`, so building and running it checks both direct and transitive dependencies.
+`./gradlew :elide-gradle-plugin:realRuntimeSmoke` from the repository root also tests a fresh copy of this example with
+a managed runtime, configuration-cache reuse, and an offline rebuild.
+
+The optional Elide-owned dependency installation mode above requires separate preparation when dependencies exist only
+in `.dev/dependencies/m2`: run `./gradlew elideInstall` before invoking `build` or `run`. Gradle can resolve those
+dependencies while constructing the task graph or storing the configuration cache, before task execution begins
+(see Gradle's [dependency substitution rules](https://docs.gradle.org/current/userguide/resolution_rules.html#sec:dependency_substitution_rules)).
+Changes to the Elide manifest require another preparation invocation. The default example uses Gradle-owned dependency
+resolution so a fresh checkout works in one command.

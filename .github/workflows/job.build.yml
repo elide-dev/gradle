@@ -49,7 +49,7 @@ jobs:
         run: ${{ matrix.gradle-command }} --stacktrace --info --no-daemon build compatibilityTest
       - name: "Integration: Real Elide install, compile, and run"
         working-directory: .
-        run: ${{ matrix.gradle-command }} --stacktrace --info --no-daemon realRuntimeSmoke -Pelide.runtime.mode=MANAGED
+        run: ${{ matrix.gradle-command }} --stacktrace --info --no-daemon realRuntimeSmoke --project-prop=elide.runtime.mode=MANAGED
 
   build-current-toolchain:
     name: "Build (Ubuntu, Java ${{ matrix.java }}, Gradle ${{ matrix.gradle-version }})"

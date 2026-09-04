@@ -148,6 +148,10 @@ val realRuntimeSmoke by tasks.registering(Test::class) {
     inputs.property("elide.runtime.mode", requestedSmokeRuntimeMode)
     systemProperty("elide.runtime.mode", requestedSmokeRuntimeMode.get())
     systemProperty("elide.runtime.version", elideVersion)
+    val exampleDirectory = rootProject.layout.projectDirectory.dir("example-project")
+    inputs.files(exampleDirectory.file("build.gradle.kts"), exampleDirectory.file("gradle.properties"))
+    inputs.dir(exampleDirectory.dir("src"))
+    systemProperty("elide.example.directory", exampleDirectory.asFile.absolutePath)
     doFirst {
         check(requestedSmokeRuntimeMode.get() == "MANAGED") {
             "realRuntimeSmoke requires -Pelide.runtime.mode=MANAGED"

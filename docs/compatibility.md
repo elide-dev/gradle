@@ -26,8 +26,8 @@ cache contract.
 
 ## Migrating from a manual `elide-javac`
 
-1. Remove the manually created `$JAVA_HOME/bin/elide-javac` (or `%JAVA_HOME%\\bin\\elide-javac`) file. The plugin now forks
-   the selected Elide executable directly and never writes below `JAVA_HOME`.
+1. Remove the manually created `$JAVA_HOME/bin/elide-javac` (or `%JAVA_HOME%\\bin\\elide-javac`) file. The plugin now
+   launches the selected Elide executable through its Java entry point and never writes below `JAVA_HOME`.
 2. Choose a runtime mode in `build.gradle.kts`:
 
    ```kotlin
@@ -72,7 +72,7 @@ managed builds should set `MANAGED` and an explicit `runtimeVersion`.
 
 ## Java compilation and installation
 
-When `enableJavaCompiler` is enabled, `JavaCompile` tasks fork the selected executable with the literal argument prefix
-`javac --`, preserving Gradle's compiler arguments. When `enableInstall` is enabled, `elideInstall` runs as a task before
+When `enableJavaCompiler` is enabled, `JavaCompile` tasks launch the selected executable with the literal argument prefix
+`javac --` through the plugin's Java entry point, preserving Gradle's compiler arguments. When `enableInstall` is enabled, `elideInstall` runs as a task before
 Java compilation and can populate `.dev/dependencies/m2` when Maven integration is enabled. Neither command runs while
 the plugin is applied or during configuration.

@@ -79,7 +79,7 @@ public final class ElideRuntimeResolver {
     private static TaskProvider<PrepareElideRuntimeTask> registerManagedPreparation(
             Project project, ElideExtension extension, ElidePlatform platform) {
         Path runtimeDirectory = managedExecutable(project, extension, platform).getParent().getParent();
-        return project.getTasks().register("prepareElideRuntime", PrepareElideRuntimeTask.class, task -> {
+        return project.getTasks().register(ElideTaskName.ELIDE_RUNTIME_PREPARE, PrepareElideRuntimeTask.class, task -> {
             task.setGroup("Elide");
             task.setDescription("Downloads and verifies the managed Elide runtime.");
             task.getRuntimeVersion().set(extension.getRuntimeVersion());

@@ -14,12 +14,56 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RealRuntimeSmokeTest {
     @TempDir(cleanup = org.junit.jupiter.api.io.CleanupMode.NEVER)
     Path temporaryDirectory;
+
+    @Test
+    void buildsAndRunsTheExampleFromScratchAndReusesTheConfigurationCache() throws IOException {
+        Path exampleDirectory = Path.of(System.getProperty("elide.example.directory"));
+        Path projectDirectory = temporaryDirectory.resolve("example");
+        Path gradleUserHome = temporaryDirectory.resolve("example-gradle-user-home");
+        Files.createDirectories(projectDirectory);
+        for (String name : new String[]{"build.gradle.kts", "gradle.properties"}) {
+            Files.copy(exampleDirectory.resolve(name), projectDirectory.resolve(name));
+        }
+        try (var sources = Files.walk(exampleDirectory.resolve("src"))) {
+            for (Path source : sources.toList()) {
+                Path target = projectDirectory.resolve(exampleDirectory.relativize(source));
+                if (Files.isDirectory(source)) Files.createDirectories(target);
+                else Files.copy(source, target);
+            }
+        }
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), "rootProject.name = \"example\"\n");
+        GradleRunner runner = GradleRunner.create()
+                .withPluginClasspath()
+                .withProjectDir(projectDirectory.toFile())
+                .withTestKitDir(temporaryDirectory.resolve("example-test-kit").toFile())
+                .withEnvironment(isolatedEnvironment(gradleUserHome))
+                .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                        "build", "run", "--configuration-cache", "--stacktrace");
+
+        BuildResult first = runner.build();
+        assertEquals(TaskOutcome.SUCCESS, first.task(":prepareElideRuntime").getOutcome());
+        assertEquals(TaskOutcome.SUCCESS, first.task(":compileJava").getOutcome());
+        assertTrue(first.getOutput().contains("Hello, World!"), first.getOutput());
+        assertTrue(Files.isRegularFile(projectDirectory.resolve("build/distributions/example.zip")));
+        assertFalse(Files.exists(projectDirectory.resolve(".dev/dependencies")));
+
+        BuildResult second = runner.build();
+        assertTrue(second.getOutput().contains("Configuration cache entry reused"), second.getOutput());
+        assertEquals(TaskOutcome.UP_TO_DATE, second.task(":compileJava").getOutcome());
+        assertTrue(second.getOutput().contains("Hello, World!"), second.getOutput());
+
+        BuildResult offline = runner.withArguments("--gradle-user-home", gradleUserHome.toString(),
+                "clean", "build", "run", "--offline", "--configuration-cache", "--stacktrace").build();
+        assertEquals(TaskOutcome.SUCCESS, offline.task(":compileJava").getOutcome());
+        assertTrue(offline.getOutput().contains("Hello, World!"), offline.getOutput());
+    }
 
     @Test
     void installsCompilesAndRunsWithThePinnedManagedRuntime() throws IOException {

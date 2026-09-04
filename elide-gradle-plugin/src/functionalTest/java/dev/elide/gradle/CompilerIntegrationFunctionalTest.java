@@ -259,9 +259,12 @@ class CompilerIntegrationFunctionalTest {
         runner(projectDirectory, Map.of()).withArguments("recordCompilerConfiguration").build();
 
         List<String> configuration = Files.readAllLines(projectDirectory.resolve("compiler-configuration.txt"));
-        assertTrue(Files.isSameFile(executable, Path.of(configuration.get(0))));
+        assertTrue(configuration.get(0).endsWith("java.exe"), configuration.toString());
+        assertEquals("-cp", configuration.get(1));
+        assertEquals("dev.elide.gradle.ElideJavaCompilerLauncher", configuration.get(3));
+        assertTrue(Files.isSameFile(executable, Path.of(configuration.get(4))));
         assertEquals(List.of("javac", "--", "-Dfixture.compiler.argument=has a space"),
-                configuration.subList(1, 4));
+                configuration.subList(5, 8));
     }
 
     private static void writeProject(Path projectDirectory, Path executable, String configuration) throws IOException {
@@ -333,7 +336,6 @@ class CompilerIntegrationFunctionalTest {
 
     private static Path writeCompilerRuntime(Path projectDirectory, Path invocationLog) throws IOException {
         Path executable = PlatformFixture.writeRecordingExecutable(projectDirectory.resolve("bin"), "elide", invocationLog);
-        PlatformFixture.linkActualJavaTools(executable.getParent());
         return executable;
     }
 

@@ -55,15 +55,13 @@ public class ElideGradlePlugin implements Plugin<Project> {
         List<String> existing = Optional.ofNullable(options.getForkOptions().getJvmArgs()).orElseGet(List::of);
         List<String> arguments = new ArrayList<>(existing.size() + 6);
         String elideExecutable = resolution.executable().get().getAsFile().getAbsolutePath();
-        if (resolution.source() == ElideRuntimeSource.MANAGED) {
-            options.getForkOptions().setExecutable(javaExecutable().toString());
-            arguments.add("-cp");
-            arguments.add(compilerLauncherClasspath());
-            arguments.add(ElideJavaCompilerLauncher.class.getName());
-            arguments.add(elideExecutable);
-        } else {
-            options.getForkOptions().setExecutable(elideExecutable);
-        }
+        // Gradle probes this executable's parent as a JDK, including for local runtimes.
+        // Launch Elide through Java so its installation never needs to contain a JDK.
+        options.getForkOptions().setExecutable(javaExecutable().toString());
+        arguments.add("-cp");
+        arguments.add(compilerLauncherClasspath());
+        arguments.add(ElideJavaCompilerLauncher.class.getName());
+        arguments.add(elideExecutable);
         arguments.add("javac");
         arguments.add("--");
         arguments.addAll(existing);
