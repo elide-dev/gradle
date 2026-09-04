@@ -273,8 +273,7 @@ class SettingsPluginFunctionalTest {
     private GradleRunner configuredRunner(Path projectDirectory) {
         return GradleRunner.create()
                 .withPluginClasspath()
-                .withProjectDir(projectDirectory.toFile())
-                .withTestKitDir(projectDirectory.resolve("test-kit").toFile());
+                .withProjectDir(projectDirectory.toFile());
     }
 
     private void assertAbsentManagedVersionFails(String mode) throws IOException {
