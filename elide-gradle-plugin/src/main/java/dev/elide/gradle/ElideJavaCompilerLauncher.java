@@ -19,7 +19,6 @@ public final class ElideJavaCompilerLauncher {
             System.exit(exitCode);
         }
     }
-
     private static Process start(ProcessBuilder builder) throws IOException {
         try {
             // Gradle 7 instruments direct start() calls with Gradle-only classes. This launcher
