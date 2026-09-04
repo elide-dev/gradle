@@ -41,6 +41,7 @@ public class ElideExtension implements ElideExtensionConfig {
     @PathSensitive(PathSensitivity.RELATIVE) @Input protected RegularFileProperty activeLockfile;
 
     @Override
+    @Deprecated
     public Property<Boolean> getEnableInstall() {
         return doEnableInstall;
     }
@@ -51,11 +52,13 @@ public class ElideExtension implements ElideExtensionConfig {
     }
 
     @Override
+    @Deprecated
     public Property<Boolean> getEnableMavenIntegration() {
         return doUseMavenIntegration;
     }
 
     @Override
+    @Deprecated
     public Property<Boolean> getEnableJavaCompiler() {
         return doEnableJavaCompiler;
     }
@@ -82,16 +85,19 @@ public class ElideExtension implements ElideExtensionConfig {
     }
 
     @Override
+    @Deprecated
     public RegularFileProperty getElideBin() {
         return activeElideBin;
     }
 
     @Override
+    @Deprecated
     public Property<ElideRuntimeMode> getRuntimeMode() {
         return doRuntimeMode;
     }
 
     @Override
+    @Deprecated
     public Property<String> getRuntimeVersion() {
         return doRuntimeVersion;
     }

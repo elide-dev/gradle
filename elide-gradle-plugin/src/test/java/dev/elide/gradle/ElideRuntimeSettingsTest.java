@@ -19,6 +19,17 @@ class ElideRuntimeSettingsTest {
     }
 
     @Test
+    void acceptsProviderBackedVersion() {
+        Project project = ProjectBuilder.builder().build();
+        ElideRuntimeSettings runtime = new ElideRuntimeSettings(project.getObjects());
+
+        runtime.version(project.provider(() -> "provider-version"));
+
+        assertEquals(ElideVersionSource.DIRECT, runtime.getVersionSourceProperty().get());
+        assertEquals("provider-version", runtime.getVersionProperty().get());
+    }
+
+    @Test
     void acceptsCatalogVersion() {
         ElideRuntimeSettings runtime = runtimeSettings();
 

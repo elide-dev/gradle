@@ -146,6 +146,60 @@ class SettingsPluginFunctionalTest {
     }
 
     @Test
+    void missingVersionCatalogReportsRequestedCatalogAndProject() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("missing-catalog");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                plugins { id("dev.elide.settings") }
+                elide { runtime { versionFrom("missing", "elide") } }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide") }
+                tasks.register("resolveElideVersion") {
+                    doLast { println(elide.runtime.version) }
+                }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":app:resolveElideVersion", "--stacktrace")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains(
+                "Elide version catalog 'missing' does not exist for project :app"), result.getOutput());
+    }
+
+    @Test
+    void missingVersionAliasReportsRequestedAliasCatalogAndProject() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("missing-alias");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                other = "1.0"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                plugins { id("dev.elide.settings") }
+                elide { runtime { versionFrom("libs", "elide") } }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide") }
+                tasks.register("resolveElideVersion") {
+                    doLast { println(elide.runtime.version) }
+                }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":app:resolveElideVersion", "--stacktrace")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains(
+                "Elide version alias 'elide' does not exist in catalog 'libs' for project :app"),
+                result.getOutput());
+    }
+
+    @Test
     void cleanProjectRuntimeDslOverridesSettingsConvention() throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("project-override");
         Files.createDirectories(projectDirectory.resolve("app"));
