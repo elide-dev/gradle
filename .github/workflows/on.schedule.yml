@@ -40,6 +40,8 @@ jobs:
             plugins.gradle.org:443
             plugins-artifacts.gradle.org:443
             repo.maven.apache.org:443
+            repo1.maven.org:443
+            maven.pkg.st:443
             api.adoptium.net:443
       - name: "Setup: Checkout"
         uses: actions/checkout@23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -53,6 +55,6 @@ jobs:
           java-version: "17"
       - name: "Setup: Gradle"
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
-      - name: "Smoke: Managed runtime"
+      - name: "Integration: Real Elide install, compile, and run"
         working-directory: .
         run: ${{ matrix.gradle-command }} realRuntimeSmoke -Pelide.runtime.mode=MANAGED

@@ -139,7 +139,7 @@ val managedSmokeRuntimeVersion = "1.5.1+20260903"
 
 val realRuntimeSmoke by tasks.registering(Test::class) {
     group = "verification"
-    description = "Verifies download, checksum, extraction, and caching through the managed plugin runtime."
+    description = "Verifies real managed Elide provisioning, dependency installation, compilation, and execution."
     testClassesDirs = realRuntimeSmokeSourceSet.output.classesDirs
     classpath = realRuntimeSmokeSourceSet.runtimeClasspath
     javaLauncher.set(javaToolchains.launcherFor {

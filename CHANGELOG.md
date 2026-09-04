@@ -25,8 +25,11 @@ release is cut.
   diagnostics.
 - Added consumer compatibility tests for Gradle 7.6.4, 8.14.5, and 9.7.1 on Java 17, plus opt-in tests for the
   Gradle 8.14.5/Java 24 and Gradle 9.7.1/Java 26 consumer pairs.
-- Added Linux, macOS, and Windows CI coverage, a scheduled/manual real managed-runtime smoke test, dependency update
-  automation, workflow concurrency controls, immutable action pins, and restricted network egress.
+- Added Linux, macOS, and Windows CI coverage, including a real Elide integration test on pull requests, pushes,
+  schedules, and manual runs. The test provisions managed Elide, installs a real dependency, compiles Java with Elide,
+  and runs the resulting application through Gradle.
+- Added dependency update automation, workflow concurrency controls, immutable action pins, and restricted network
+  egress.
 - Added [runtime management](docs/runtime-management.md) and [compatibility and migration](docs/compatibility.md)
   documentation.
 
@@ -67,8 +70,8 @@ release is cut.
 - Fixed Windows wrapper invocation, executable naming, ZIP handling, native fixture execution, and ordinary compiler
   argument preservation.
 - Fixed CI lanes that labeled—but did not actually execute—the intended JDK/Gradle consumer pairs.
-- Fixed the real-runtime smoke test so it exercises the production managed resolver, checksum, extraction, and cache
-  completion path.
+- Fixed the real-runtime smoke test so it exercises the production managed resolver, checksum, extraction, dependency
+  installation, Java compilation, and application execution paths.
 - Fixed the version catalog plugin alias so it resolves `dev.elide` version `1.0.0` rather than the Elide runtime version.
 
 ### Removed

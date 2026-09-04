@@ -6,6 +6,9 @@ import org.gradle.api.Task;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.JavaCompile;
 
+import java.io.File;
+import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -49,14 +52,41 @@ public class ElideGradlePlugin implements Plugin<Project> {
     private void configureJavaCompileToUseElide(JavaCompile task, ElideRuntimeResolution resolution) {
         var options = task.getOptions();
         options.setFork(true);
-        options.getForkOptions().setExecutable(
-                resolution.executable().get().getAsFile().getAbsolutePath());
         List<String> existing = Optional.ofNullable(options.getForkOptions().getJvmArgs()).orElseGet(List::of);
-        List<String> arguments = new ArrayList<>(existing.size() + 2);
+        List<String> arguments = new ArrayList<>(existing.size() + 6);
+        String elideExecutable = resolution.executable().get().getAsFile().getAbsolutePath();
+        if (resolution.source() == ElideRuntimeSource.MANAGED) {
+            options.getForkOptions().setExecutable(javaExecutable().toString());
+            arguments.add("-cp");
+            arguments.add(compilerLauncherClasspath());
+            arguments.add(ElideJavaCompilerLauncher.class.getName());
+            arguments.add(elideExecutable);
+        } else {
+            options.getForkOptions().setExecutable(elideExecutable);
+        }
         arguments.add("javac");
         arguments.add("--");
         arguments.addAll(existing);
         options.getForkOptions().setJvmArgs(arguments);
+    }
+
+    private static Path javaExecutable() {
+        String executableName = System.getProperty("os.name").toLowerCase().startsWith("windows")
+                ? "java.exe"
+                : "java";
+        return Path.of(System.getProperty("java.home"), "bin", executableName);
+    }
+
+    private static String compilerLauncherClasspath() {
+        try {
+            return new File(ElideJavaCompilerLauncher.class.getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation()
+                    .toURI())
+                    .getAbsolutePath();
+        } catch (URISyntaxException exception) {
+            throw new IllegalStateException("Unable to locate the Elide compiler launcher", exception);
+        }
     }
 
     private TaskProvider<ElideExecTask> configureInstallTask(
@@ -96,6 +126,10 @@ public class ElideGradlePlugin implements Plugin<Project> {
         project.getRepositories().maven(repository -> {
             repository.setName("elide");
             repository.setUrl(extension.resolveLocalDepsPath().toUri());
+            repository.metadataSources(sources -> {
+                sources.mavenPom();
+                sources.artifact();
+            });
         });
     }
 
