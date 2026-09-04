@@ -77,6 +77,9 @@ class RuntimeSelectionFunctionalTest {
 
     private static Map<String, String> environmentWithPath(Path executableDirectory) {
         Map<String, String> environment = new HashMap<>(System.getenv());
+        // Windows treats environment names case-insensitively, but the copied Java map may retain
+        // `Path`; remove it before adding `PATH` so ProcessBuilder cannot choose the stale value.
+        environment.keySet().removeIf(name -> name.equalsIgnoreCase("PATH"));
         environment.put("PATH", executableDirectory.toString());
         environment.put("GRADLE_USER_HOME", executableDirectory.getParent().resolve("gradle-user-home").toString());
         return environment;
