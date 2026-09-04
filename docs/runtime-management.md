@@ -1,8 +1,9 @@
 # Runtime management
 
 The plugin resolves one Elide executable for each project. Selection is lazy: applying `dev.elide` registers the
-extension and task wiring, but does not download, extract, or execute Elide. A managed preparation task runs only when a
-managed executable is selected and a consuming task needs it. No runtime mode creates or modifies files below `JAVA_HOME`.
+extension and task wiring, but does not download, extract, or execute Elide. A managed preparation task is registered when
+a managed executable is selected; invoke `prepareElideRuntime` directly or let a consuming task depend on it. No runtime
+mode creates or modifies files below `JAVA_HOME`.
 
 ## Modes and precedence
 
@@ -11,7 +12,7 @@ managed executable is selected and a consuming task needs it. No runtime mode cr
 | Mode | Selection | Network behavior |
 | --- | --- | --- |
 | `AUTO` | Explicit `elideBin`, then the first usable executable on `PATH`, then managed runtime | May download only when it reaches managed fallback |
-| `PATH` | Explicit `elideBin`, then the first usable executable on `PATH`; no fallback | Never downloads, extracts, or registers managed preparation |
+| `PATH` | Explicit `elideBin`, then the first usable executable on `PATH`; no fallback | Never downloads a managed runtime archive/checksum, extracts it, or registers managed preparation |
 | `MANAGED` | The configured version and platform cache entry | Downloads on a cache miss unless Gradle is offline |
 
 In `AUTO`, an explicit executable is considered before `PATH`. A PATH lookup preserves directory order and uses the
@@ -21,6 +22,18 @@ executable files; Windows candidates must be regular files. `MANAGED` intentiona
 `elideBin` is the explicit executable override. `runtimeVersion` defaults to `1.5.1+20260903`. The deprecated
 `resolveElideFromPath` property remains for source compatibility: an explicitly supplied `true` selects `PATH`, and an
 explicit `false` selects `MANAGED`.
+
+For example, select and pin the managed runtime in the consumer build script before invoking
+`./gradlew prepareElideRuntime`:
+
+```kotlin
+import dev.elide.gradle.ElideRuntimeMode
+
+elide {
+    runtimeMode = ElideRuntimeMode.MANAGED
+    runtimeVersion = "1.5.1+20260903"
+}
+```
 
 ## Managed release assets
 
@@ -41,9 +54,10 @@ For the pinned `1.5.1+20260903` release, the available assets are:
 
 This release does not publish `elide.macos-amd64.tgz`. Therefore `MANAGED` is unavailable on Intel macOS for this
 pinned version and fails when the missing archive is requested. `PATH` and an explicit `elideBin` remain supported there.
-Unknown operating systems, Windows ARM64, and other unsupported combinations fail with
-`Unsupported Elide platform: <os>/<arch>`; use a supported platform or select a locally installed runtime with `PATH` or
-`elideBin`.
+The resolver detects the host platform before runtime selection. Unknown operating systems, Windows ARM64, and other
+unsupported combinations therefore fail with `Unsupported Elide platform: <os>/<arch>` before PATH or explicit fallback
+is considered; use a supported host/platform. macOS amd64 is a recognized platform mapping, but this pinned release lacks
+its managed asset, so PATH or `elideBin` can be used there.
 
 The plugin requests the archive and its adjacent `.sha256` file. It parses one 64-character SHA-256 value, hashes the
 downloaded archive, and compares the values before extraction. Extraction occurs in a unique sibling staging directory;
@@ -86,18 +100,20 @@ this diagnostic, including the exact version and path:
 Elide runtime version <version> is not cached at <GRADLE_USER_HOME>/caches/dev.elide/runtimes/<version>/<platform>
 ```
 
-The remedy is to run a connected build once (for example, `./gradlew prepareElideRuntime -Pelide.runtime.mode=MANAGED`),
-then rerun with `--offline`, or choose `PATH`/`elideBin` for an installed runtime. `PATH` mode has a hard network
-guarantee: it never downloads an archive or checksum, never extracts a distribution, and never registers a managed
-preparation task. If no usable executable is found, it fails with:
+The remedy is to run a connected build once (for example, `./gradlew prepareElideRuntime` after configuring
+`runtimeMode = ElideRuntimeMode.MANAGED` in the build script), then rerun with `--offline`, or choose `PATH`/`elideBin` for
+an installed runtime. `PATH` mode has a hard managed-runtime network guarantee: it never downloads a managed runtime
+archive or checksum, never extracts that archive, and never registers a managed preparation task. If `enableInstall` is
+enabled, its separate `elide install` task may still resolve project dependencies. If no usable executable is found, it
+fails with:
 
 ```text
 Elide PATH runtime was requested but no executable was found
 ```
 
 The remedy is to install a compatible `elide`/`elide.exe` on `PATH`, set `elideBin`, or choose `MANAGED` in a connected
-build. `AUTO` can reach the network only after explicit and PATH lookup both fail and managed preparation is actually
-requested.
+build. `AUTO` can reach the managed-runtime network only after explicit and PATH lookup both fail and managed preparation
+is actually requested.
 
 ## Error remedies
 

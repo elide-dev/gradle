@@ -156,3 +156,100 @@ This macOS workspace cannot provide hosted Windows execution, hosted Linux execu
 scheduled three-OS smoke workflow evidence. Those remain owned by the configured GitHub Actions workflows. The local
 real smoke did verify the production GitHub release path on macOS arm64; the workflow's immutable action pins and egress
 allow-list still require hosted CI confirmation.
+
+## Fix round 1/5: review findings
+
+The first review identified four Important and two Minor documentation/metadata findings. This round addresses each:
+
+- Every copyable Kotlin DSL snippet that uses `ElideRuntimeMode` now imports `dev.elide.gradle.ElideRuntimeMode` in
+  `README.md`, `docs/runtime-management.md`, and `docs/compatibility.md`.
+- Consumer cache pre-population now configures `runtimeMode = ElideRuntimeMode.MANAGED` and
+  `runtimeVersion = "1.5.1+20260903"` in `build.gradle.kts`, then runs `./gradlew prepareElideRuntime` with no
+  unsupported runtime-mode project property. The `-Pelide.runtime.mode=MANAGED` property is explicitly documented as
+  the repository smoke guard only.
+- Unsupported OS/Windows ARM64 guidance now states that host detection fails before PATH/explicit selection. Only the
+  mapped macOS-amd64 case (whose pinned release asset is missing) documents PATH/explicit fallback.
+- The catalog now keeps library aliases on runtime version `1.5.1+20260903`, adds an `elidePlugin` version key from the
+  project version, and points the `dev.elide` plugin alias at `elidePlugin` (`1.0.0`).
+- PATH's network guarantee is explicitly limited to managed runtime archive/checksum provisioning; enabled `elide install`
+  may still resolve project dependencies. Managed preparation is documented as registered for managed selection and
+  invokable directly or through consuming-task dependencies.
+
+### Focused catalog generation/publication verification
+
+```text
+./gradlew :elide-gradle-catalog:generateCatalogAsToml :elide-gradle-catalog:generateMetadataFileForMavenPublication
+```
+
+Result: `BUILD SUCCESSFUL in 2s`; 6 actionable tasks, 2 executed and 4 up-to-date.
+
+The generated `elide-gradle-catalog/build/version-catalog/libs.versions.toml` contains:
+
+```text
+elide = "1.5.1+20260903"
+elidePlugin = "1.0.0"
+elide = {id = "dev.elide", version.ref = "elidePlugin" }
+```
+
+```text
+./gradlew :elide-gradle-catalog:publishAllPublicationsToMavenRepository
+```
+
+Result: `BUILD SUCCESSFUL in 392ms`; 9 actionable tasks, 4 executed and 5 up-to-date. The published TOML under
+`build/elide-maven/dev/elide/gradle/elide-gradle-catalog/1.0.0/` contains the same three assertions. Published module
+metadata identifies `dev.elide.gradle:elide-gradle-catalog:1.0.0` and the `versionCatalogElements` artifact.
+
+Focused shell assertions required exactly one runtime key, one plugin-version key, and one plugin alias reference:
+
+```text
+runtime key: 8:elide = "1.5.1+20260903"
+plugin key: 9:elidePlugin = "1.0.0"
+plugin alias: 17:elide = {id = "dev.elide", version.ref = "elidePlugin" }
+```
+
+### Fix-round build and docs verification
+
+```text
+./gradlew build compatibilityTest
+```
+
+Result: `BUILD SUCCESSFUL in 407ms`; 20 actionable tasks up-to-date after the catalog source change.
+
+```text
+./gradlew :elide-gradle-plugin:compatibilityTest --rerun-tasks
+```
+
+Result: all three literal consumer versions (Gradle 7.6.4, 8.14.5, and 9.7.1) passed under the Java 17 compatibility
+launcher. This rerun is intentionally limited to local compatibility coverage; the external smoke was not rerun because
+this fix round does not touch runtime/download code.
+
+The copyable Kotlin snippets were checked for an import immediately preceding each enum use. A docs contract grep found
+`AUTO`, `PATH`, `MANAGED`, `1.5.1+20260903`, `JAVA_HOME`, cache paths, GitHub release origin, Java 17, and macOS amd64 in
+the expected documentation files. The runtime/compatibility docs contain no consumer pre-population command using
+`-Pelide.runtime.mode=MANAGED`; the only remaining occurrences are the repository smoke command and its explanatory
+report evidence.
+
+```text
+git diff --check
+```
+
+Result after staging the fix-round changes: no output, exit 0.
+
+### Post-append verification
+
+The compatibility rerun above produced the following fresh result after all fix-round source edits:
+
+```text
+./gradlew :elide-gradle-plugin:compatibilityTest --rerun-tasks
+BUILD SUCCESSFUL in 8s
+11 actionable tasks: 11 executed
+```
+
+The focused documentation checks produced:
+
+```text
+enum snippets: all imports present
+consumer pre-population docs: no repository smoke -P guard
+unsupported-host fallback: no PATH/explicit promise
+git diff --check: no output
+```

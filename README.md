@@ -35,9 +35,9 @@ elide {
 ```
 
 Applying the plugin only registers Gradle configuration and task wiring. It does not download or execute Elide, and it
-does not create or modify any file in `JAVA_HOME`. Runtime preparation is lazy and happens only when a task that needs a
-managed runtime runs. Java compilation invokes the selected Elide executable directly as `elide javac -- ...`; no
-`elide-javac` launcher is required.
+does not create or modify any file in `JAVA_HOME`. Managed preparation is registered for a managed selection and runs
+when `prepareElideRuntime` is invoked directly or when a consuming task depends on it. Java compilation invokes the
+selected Elide executable directly as `elide javac -- ...`; no `elide-javac` launcher is required.
 
 ### Runtime selection
 
@@ -47,11 +47,14 @@ The default `AUTO` mode checks these sources in order:
 2. A compatible Elide executable on `PATH`.
 3. The managed runtime in Gradle User Home, using the configured `runtimeVersion`.
 
-Use `PATH` to forbid downloads and require an installed runtime. Use `MANAGED` to require the exact configured version and
-never silently use an installed runtime. The pinned default managed version is `1.5.1+20260903`; set `runtimeVersion` to
-another release when that release publishes a matching asset.
+Use `PATH` to forbid managed runtime archive/checksum downloads and require an installed runtime. Other opt-in tasks such
+as `elide install` may still resolve project dependencies. Use `MANAGED` to require the exact configured version and never
+silently use an installed runtime. The pinned default managed version is `1.5.1+20260903`; set `runtimeVersion` to another
+release when that release publishes a matching asset.
 
 ```kotlin
+import dev.elide.gradle.ElideRuntimeMode
+
 elide {
     runtimeMode = ElideRuntimeMode.MANAGED
     runtimeVersion = "1.5.1+20260903"
@@ -61,6 +64,8 @@ elide {
 For a local or non-standard executable, configure `elideBin` explicitly:
 
 ```kotlin
+import dev.elide.gradle.ElideRuntimeMode
+
 elide {
     runtimeMode = ElideRuntimeMode.PATH
     elideBin = layout.projectDirectory.file("tools/elide")

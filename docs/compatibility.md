@@ -27,6 +27,8 @@ cache contract.
 2. Choose a runtime mode in `build.gradle.kts`:
 
    ```kotlin
+   import dev.elide.gradle.ElideRuntimeMode
+
    elide {
        runtimeMode = ElideRuntimeMode.AUTO
    }
@@ -37,6 +39,8 @@ cache contract.
 3. For reproducible builds, pin both the plugin version and the managed runtime version rather than using moving labels:
 
    ```kotlin
+   import dev.elide.gradle.ElideRuntimeMode
+
    elide {
        runtimeMode = ElideRuntimeMode.MANAGED
        runtimeVersion = "1.5.1+20260903"
@@ -47,12 +51,16 @@ cache contract.
 4. For an offline managed build, pre-populate the cache while connected:
 
    ```bash
-   ./gradlew prepareElideRuntime -Pelide.runtime.mode=MANAGED
+   ./gradlew prepareElideRuntime
    ./gradlew --offline build
    ```
 
-   The second command reuses the completed cache. If preparation is attempted offline without a completed entry, it fails
-   with the exact version and cache path; see [offline behavior](runtime-management.md#offline-builds-and-network-guarantees).
+   The managed `runtimeMode` and `runtimeVersion` are configured in the preceding `build.gradle.kts` snippet; the
+   `prepareElideRuntime` command takes no runtime-mode project property. The second command reuses the completed cache.
+   If preparation is attempted offline without a completed entry, it fails with the exact version and cache path; see
+   [offline behavior](runtime-management.md#offline-builds-and-network-guarantees). The repository's
+   `-Pelide.runtime.mode=MANAGED` flag is only an opt-in guard for its real-runtime smoke task, not consumer plugin
+   configuration.
 
 Existing `resolveElideFromPath` assignments remain source-compatible but are deprecated. Prefer `runtimeMode` for new
 builds. Existing PATH builds that remove the shim and leave Elide installed on PATH can use `AUTO` or `PATH`; existing
