@@ -63,6 +63,28 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
+    void preservesLiteralDiagnosticContextWhenEnvironmentValuesMatchLabels() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("literal-context-project");
+        Path executable = writeFailingExecutable(projectDirectory);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of(
+                "ELIDE_TEST_SECRET", SECRET,
+                "ELIDE_TEST_MARKER", "ELIDE_EXIT_CODE",
+                "ELIDE_TEST_LABEL_FRAGMENT", "x"))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("Elide command failed: executable "), result.getOutput());
+        assertTrue(result.getOutput().contains(", working directory "), result.getOutput());
+        assertTrue(result.getOutput().contains(", exit code 23."), result.getOutput());
+        assertFalse(result.getOutput().contains(SECRET), result.getOutput());
+    }
+
+    @Test
     void redactsEnvironmentValuesFromExecutableAndWorkingDirectoryWithLongestValueFirst() throws IOException {
         String prefix = "fixture-secret";
         String secret = prefix + "-suffix";
@@ -113,6 +135,30 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
+    void withholdsCapturedOutputWhenAnEnvironmentValueExceedsTheFixedSafeBound() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The oversized-output fixture uses a POSIX fake executable.");
+        Path projectDirectory = temporaryDirectory.resolve("oversized-secret-project");
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf '%s\\n' "$ELIDE_TEST_SECRET"
+                exit 23
+                """);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+        String oversizedSecret = "s".repeat(2048);
+
+        BuildResult result = runner(projectDirectory, Map.of("ELIDE_TEST_SECRET", oversizedSecret))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("Captured output withheld"), result.getOutput());
+        assertFalse(result.getOutput().contains(oversizedSecret.substring(0, 64)), result.getOutput());
+    }
+
+    @Test
     void reportsAnUnstartableExecutableAsAStructuredRedactedFailure() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The unstartable fixture uses a missing POSIX interpreter.");
@@ -134,6 +180,44 @@ class CompilerIntegrationFunctionalTest {
         assertTrue(result.getOutput().contains("working directory "), result.getOutput());
         assertTrue(result.getOutput().contains("exit code -1"), result.getOutput());
         assertFalse(result.getOutput().contains(secret), result.getOutput());
+    }
+
+    @Test
+    @EnabledOnOs(OS.WINDOWS)
+    void executesWindowsNativeArgumentsDirectlyWithoutTheCommandInterpreter() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("windows-direct-arguments");
+        Path invocationLog = projectDirectory.resolve("elide-invocations");
+        Path executable = PlatformFixture.writeRecordingExecutable(projectDirectory.resolve("bin"), "elide", invocationLog);
+        Files.writeString(projectDirectory.resolve("elide.pkl"), "fixture manifest\n");
+        Files.createDirectories(projectDirectory.resolve(".dev"));
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                }
+
+                elide {
+                    getElideBin().set(layout.projectDirectory.file('%s'))
+                    getEnableInstall().set(false)
+                    getEnableJavaCompiler().set(false)
+                }
+
+                tasks.register('recordHostileArguments', dev.elide.gradle.ElideExecTask) {
+                    getElideExecutable().set(layout.projectDirectory.file('%s'))
+                    getElideArguments().set(['record', '100%%&|<>^', 'after'])
+                    getWorkingDirectory().set(layout.projectDirectory)
+                    getWorkingDirectoryPath().set(projectDir.absolutePath)
+                    getManifest().set(layout.projectDirectory.file('elide.pkl'))
+                    getDevRootInputs().from(fileTree('.dev'))
+                    getGeneratedDependencyRepository().set(layout.projectDirectory.dir('hostile-output'))
+                }
+                """.formatted(groovyQuote(projectDirectory.relativize(executable)),
+                groovyQuote(projectDirectory.relativize(executable))));
+
+        runner(projectDirectory, Map.of()).withArguments("recordHostileArguments").build();
+
+        assertEquals(List.of(List.of("record", "100%&|<>^", "after")),
+                PlatformFixture.readInvocations(invocationLog));
     }
 
     @Test
