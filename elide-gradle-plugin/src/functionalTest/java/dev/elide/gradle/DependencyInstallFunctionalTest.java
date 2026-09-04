@@ -95,7 +95,7 @@ class DependencyInstallFunctionalTest {
         String script = PlatformFixture.recordingScriptFor("Windows 11", temporaryDirectory);
         assertTrue(script.contains("@echo off"));
         assertTrue(script.contains("echo(%~1"));
-        assertTrue(script.contains("if \"%1\"==\"\" goto recorded"));
+        assertTrue(script.contains("if [%1]==[] goto recorded"));
         assertFalse(script.contains("if \"%~1\"==\"\" goto recorded"));
     }
 

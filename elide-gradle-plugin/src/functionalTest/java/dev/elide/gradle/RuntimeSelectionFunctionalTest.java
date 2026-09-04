@@ -34,9 +34,12 @@ class RuntimeSelectionFunctionalTest {
         Path executable = executableDirectory.resolve(PlatformFixture.isWindows() ? "elide.exe" : "elide");
         Path invocationLog = projectDirectory.resolve("elide-invocations.log");
         Files.createDirectories(executableDirectory);
-        Files.writeString(executable, PlatformFixture.isWindows()
-                ? "@echo off\r\necho called>>\"" + invocationLog + "\"\r\nexit /b 0\r\n"
-                : "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
+        if (PlatformFixture.isWindows()) {
+            Files.copy(Path.of(System.getProperty("java.home")).resolve("bin/java.exe"), executable);
+        } else {
+            Files.writeString(executable,
+                    "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
+        }
         executable.toFile().setExecutable(true);
         Files.writeString(projectDirectory.resolve("settings.gradle"), "");
         Files.writeString(projectDirectory.resolve("build.gradle"), """

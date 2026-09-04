@@ -174,7 +174,7 @@ final class PlatformFixture {
                 > "%%counterFile%%" echo %%count%%
                 set "argsFile=%%logDirectory%%\\%%count%%.args"
                 :record
-                if "%%1"=="" goto recorded
+                if [%%1]==[] goto recorded
                 >> "%%argsFile%%" echo(%%~1
                 shift
                 goto record

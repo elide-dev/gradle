@@ -259,7 +259,7 @@ class CompilerIntegrationFunctionalTest {
         runner(projectDirectory, Map.of()).withArguments("recordCompilerConfiguration").build();
 
         List<String> configuration = Files.readAllLines(projectDirectory.resolve("compiler-configuration.txt"));
-        assertEquals(executable.toAbsolutePath().toString(), configuration.get(0));
+        assertTrue(Files.isSameFile(executable, Path.of(configuration.get(0))));
         assertEquals(List.of("javac", "--", "-Dfixture.compiler.argument=has a space"),
                 configuration.subList(1, 4));
     }
