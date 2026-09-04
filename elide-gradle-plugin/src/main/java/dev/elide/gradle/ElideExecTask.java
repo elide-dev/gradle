@@ -41,7 +41,6 @@ public abstract class ElideExecTask extends DefaultTask {
             + MAX_CAPTURED_OUTPUT_BYTES + " bytes]";
     private static final String WITHHELD_OUTPUT_MARKER = "[Captured output withheld: environment values exceed the "
             + "redaction-safe capture bound]";
-    private static final RedactionPolicy REDACTION_POLICY = RedactionPolicy.create();
     private final ExecOperations execOperations;
 
     @Inject
@@ -83,8 +82,9 @@ public abstract class ElideExecTask extends DefaultTask {
 
     @TaskAction
     public void executeElide() {
-        BoundedOutputStream standardOutput = new BoundedOutputStream();
-        BoundedOutputStream errorOutput = new BoundedOutputStream();
+        RedactionPolicy redactionPolicy = RedactionPolicy.create();
+        BoundedOutputStream standardOutput = new BoundedOutputStream(redactionPolicy);
+        BoundedOutputStream errorOutput = new BoundedOutputStream(redactionPolicy);
         ExecResult result;
         try {
             result = getExecOperations().exec(spec -> {
@@ -97,48 +97,54 @@ public abstract class ElideExecTask extends DefaultTask {
                 spec.setIgnoreExitValue(true);
             });
         } catch (RuntimeException exception) {
-            throw new GradleException(failureMessage(
+            throw new GradleException(failureMessage(redactionPolicy,
                     -1,
                     standardOutput.content(),
                     exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage()));
         }
         if (result.getExitValue() != 0) {
-            throw new GradleException(failureMessage(
+            throw new GradleException(failureMessage(redactionPolicy,
                     result.getExitValue(),
                     standardOutput.content(),
                     errorOutput.content()));
         }
     }
 
-    private String failureMessage(int exitCode, String standardOutput, String errorOutput) {
+    private String failureMessage(
+            RedactionPolicy redactionPolicy, int exitCode, String standardOutput, String errorOutput) {
         String message = "Elide command failed: executable "
-                + REDACTION_POLICY.redact(getElideExecutable().get().getAsFile().getAbsolutePath())
+                + redactionPolicy.redact(getElideExecutable().get().getAsFile().getAbsolutePath())
                 + ", working directory "
-                + REDACTION_POLICY.redact(getWorkingDirectory().get().getAsFile().getAbsolutePath())
+                + redactionPolicy.redact(getWorkingDirectory().get().getAsFile().getAbsolutePath())
                 + ", exit code " + exitCode + ".";
         if (!standardOutput.isBlank()) {
-            message += "\nStandard output:\n" + redactOutput(standardOutput);
+            message += "\nStandard output:\n" + redactOutput(redactionPolicy, standardOutput);
         }
         if (!errorOutput.isBlank()) {
-            message += "\nStandard error:\n" + redactOutput(errorOutput);
+            message += "\nStandard error:\n" + redactOutput(redactionPolicy, errorOutput);
         }
         return message;
     }
 
-    private static String redactOutput(String output) {
-        return WITHHELD_OUTPUT_MARKER.equals(output) ? output : REDACTION_POLICY.redact(output);
+    private static String redactOutput(RedactionPolicy redactionPolicy, String output) {
+        return WITHHELD_OUTPUT_MARKER.equals(output) ? output : redactionPolicy.redact(output);
     }
 
     /** Limits captured process output so a noisy failed command cannot exhaust the Gradle daemon. */
     private static final class BoundedOutputStream extends OutputStream {
+        private final RedactionPolicy redactionPolicy;
         private final ByteArrayOutputStream delegate = new ByteArrayOutputStream(MAX_CAPTURE_STORAGE_BYTES);
         private boolean sawOutput;
         private boolean truncated;
 
+        private BoundedOutputStream(RedactionPolicy redactionPolicy) {
+            this.redactionPolicy = redactionPolicy;
+        }
+
         @Override
         public void write(int value) {
             sawOutput = true;
-            if (!REDACTION_POLICY.isSafe()) {
+            if (!redactionPolicy.isSafe()) {
                 return;
             }
             if (delegate.size() < MAX_CAPTURE_STORAGE_BYTES) {
@@ -154,7 +160,7 @@ public abstract class ElideExecTask extends DefaultTask {
                 return;
             }
             sawOutput = true;
-            if (!REDACTION_POLICY.isSafe()) {
+            if (!redactionPolicy.isSafe()) {
                 return;
             }
             int available = MAX_CAPTURE_STORAGE_BYTES - delegate.size();
@@ -171,7 +177,7 @@ public abstract class ElideExecTask extends DefaultTask {
             if (!sawOutput) {
                 return "";
             }
-            if (!REDACTION_POLICY.isSafe()) {
+            if (!redactionPolicy.isSafe()) {
                 return WITHHELD_OUTPUT_MARKER;
             }
             byte[] captured = delegate.toByteArray();
@@ -179,7 +185,7 @@ public abstract class ElideExecTask extends DefaultTask {
             ByteArrayOutputStream redacted = new ByteArrayOutputStream(outputLimit);
             boolean renderedTruncated = false;
             for (int offset = 0; offset < outputLimit; ) {
-                int redactionLength = REDACTION_POLICY.matchingLength(captured, offset);
+                int redactionLength = redactionPolicy.matchingLength(captured, offset);
                 if (redactionLength == 0) {
                     if (redacted.size() == MAX_CAPTURED_OUTPUT_BYTES) {
                         renderedTruncated = true;
