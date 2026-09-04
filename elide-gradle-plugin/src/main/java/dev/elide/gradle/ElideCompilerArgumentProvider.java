@@ -2,7 +2,6 @@ package dev.elide.gradle;
 
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.RegularFileProperty;
-import org.gradle.api.provider.Property;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
@@ -19,9 +18,6 @@ public abstract class ElideCompilerArgumentProvider implements CommandLineArgume
     @InputFile
     @PathSensitive(PathSensitivity.ABSOLUTE)
     public abstract RegularFileProperty getElideExecutable();
-
-    @Input
-    public abstract Property<ElideRuntimeSource> getRuntimeSource();
 
     @Classpath
     public abstract ConfigurableFileCollection getLauncherClasspath();

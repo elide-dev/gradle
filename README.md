@@ -41,6 +41,8 @@ elide {
 Apply `dev.elide` only to projects that use Elide. Non-participating and aggregation projects remain untouched. Gradle
 7.6 Kotlin settings scripts can configure the extension explicitly with
 `configure<ElideSettingsExtension> { runtime { ... } }`; newer Gradle versions provide the `elide` accessor shown above.
+The settings and project plugins ship in the same implementation artifact, so the versioned settings plugin makes the
+unversioned `dev.elide` project plugin available to participating projects.
 
 To keep the runtime version in a consumer catalog, declare an `elide` entry under `[versions]` and replace the direct
 version with `versionFrom("libs", "elide")`.

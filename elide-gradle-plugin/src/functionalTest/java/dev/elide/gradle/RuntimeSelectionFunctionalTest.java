@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuntimeSelectionFunctionalTest {
@@ -91,6 +92,16 @@ class RuntimeSelectionFunctionalTest {
         BuildResult second = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
                 .withArguments("--configuration-cache", "help")
                 .build();
+
+        assertTrue(first.getOutput().contains("Configuration cache entry stored"));
+        assertTrue(second.getOutput().contains("Configuration cache entry reused"));
+        if (PlatformFixture.isWindows()) {
+            // The relocated java.exe is a discoverable native file, but cannot execute without its
+            // adjacent JDK DLLs. Windows still exercises lazy configuration and PATH discovery here.
+            assertFalse(Files.exists(invocationLog));
+            return;
+        }
+
         BuildResult compile = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
                 .withArguments("--configuration-cache", "compileJava")
                 .build();
@@ -98,8 +109,6 @@ class RuntimeSelectionFunctionalTest {
                 .withArguments("--configuration-cache", "compileJava")
                 .build();
 
-        assertTrue(first.getOutput().contains("Configuration cache entry stored"));
-        assertTrue(second.getOutput().contains("Configuration cache entry reused"));
         assertTrue(compile.getOutput().contains("Configuration cache entry stored"), compile.getOutput());
         assertTrue(cachedCompile.getOutput().contains("Configuration cache entry reused"), cachedCompile.getOutput());
         assertTrue(Files.exists(invocationLog));

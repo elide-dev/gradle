@@ -264,9 +264,11 @@ class CompilerIntegrationFunctionalTest {
 
         List<String> configuration = Files.readAllLines(projectDirectory.resolve("compiler-configuration.txt"));
         assertTrue(configuration.get(0).endsWith("java.exe"), configuration.toString());
-        assertTrue(configuration.contains(executable.toAbsolutePath().toString()), configuration.toString());
-        assertTrue(configuration.contains("javac"), configuration.toString());
-        assertTrue(configuration.contains("--"), configuration.toString());
+        int launcherIndex = configuration.indexOf("dev.elide.gradle.ElideJavaCompilerLauncher");
+        assertTrue(launcherIndex >= 0, configuration.toString());
+        assertTrue(Files.isSameFile(executable, Path.of(configuration.get(launcherIndex + 1))));
+        assertEquals(List.of("javac", "--", "-Xdefinitely-not-a-java-option"),
+                configuration.subList(launcherIndex + 2, launcherIndex + 5));
     }
 
     private static void writeProject(Path projectDirectory, Path executable, String configuration) throws IOException {
