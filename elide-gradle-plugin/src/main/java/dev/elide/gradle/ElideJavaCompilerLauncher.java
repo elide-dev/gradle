@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 
-/** Launches a local or prepared managed Elide executable as Gradle's Java compiler process. */
+/** Launches the selected Elide executable as Gradle's Java compiler process. */
 public final class ElideJavaCompilerLauncher {
     private ElideJavaCompilerLauncher() {
     }

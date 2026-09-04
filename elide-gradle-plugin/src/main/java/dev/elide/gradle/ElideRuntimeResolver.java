@@ -24,14 +24,28 @@ public final class ElideRuntimeResolver {
         ElidePlatform platform = ElidePlatform.detect(
                 System.getProperty("os.name"),
                 System.getProperty("os.arch"));
-        Provider<ElideRuntimeSelection> selection = project.provider(() -> ElideRuntimeLocator.locate(
-                effectiveMode(extension),
-                extension.getElideBin().isPresent()
-                        ? java.util.Optional.of(extension.getElideBin().get().getAsFile().toPath())
-                        : java.util.Optional.empty(),
-                pathDirectories(project),
-                managedExecutable(project, extension.getRuntimeVersion().get(), platform),
-                platform));
+        Provider<String> managedVersion = project.provider(() -> requireManagedVersion(extension));
+        Provider<ElideRuntimeSelection> selection = project.provider(() -> {
+            ElideRuntimeMode mode = effectiveMode(extension);
+            java.util.Optional<Path> explicit = extension.getElideBin().isPresent()
+                    ? java.util.Optional.of(extension.getElideBin().get().getAsFile().toPath())
+                    : java.util.Optional.empty();
+            java.util.Optional<Path> installed = ElideRuntimeLocator.findInstalled(
+                    explicit, pathDirectories(project), platform);
+            if (mode != ElideRuntimeMode.MANAGED && installed.isPresent()) {
+                return new ElideRuntimeSelection(
+                        explicit.filter(installed.get()::equals).isPresent()
+                                ? ElideRuntimeSource.EXPLICIT
+                                : ElideRuntimeSource.PATH,
+                        installed.get());
+            }
+            if (mode == ElideRuntimeMode.PATH) {
+                throw new IllegalStateException("Elide PATH runtime was requested but no executable was found");
+            }
+            return new ElideRuntimeSelection(
+                    ElideRuntimeSource.MANAGED,
+                    managedExecutable(project, managedVersion.get(), platform));
+        });
         Provider<RegularFile> executable = project.getLayout().file(
                 selection.map(selected -> selected.executable().toFile()));
         Provider<ElideRuntimeSource> source = selection.map(ElideRuntimeSelection::source);
@@ -74,13 +88,14 @@ public final class ElideRuntimeResolver {
             ElideExtension extension,
             ElidePlatform platform,
             Provider<ElideRuntimeSource> source) {
-        Provider<java.io.File> runtimeDirectory = extension.getRuntimeVersion().map(version ->
+        Provider<String> managedVersion = project.provider(() -> requireManagedVersion(extension));
+        Provider<java.io.File> runtimeDirectory = managedVersion.map(version ->
                 managedExecutable(project, version, platform).getParent().getParent().toFile());
         return project.getTasks().register(
                 ElideTaskName.ELIDE_RUNTIME_PREPARE, PrepareElideRuntimeTask.class, task -> {
             task.setGroup("Elide");
             task.setDescription("Downloads and verifies the managed Elide runtime.");
-            task.getRuntimeVersion().set(extension.getRuntimeVersion());
+            task.getRuntimeVersion().set(managedVersion);
             task.getPlatformOs().set(platform.os());
             task.getPlatformArch().set(platform.arch());
             task.getArchiveExtension().set(platform.archiveExtension());
@@ -97,5 +112,15 @@ public final class ElideRuntimeResolver {
     static URI releaseBaseUri(Project project) {
         return URI.create(project.getProviders().systemProperty(TEST_RELEASE_BASE_URI_PROPERTY)
                 .getOrElse(DEFAULT_RELEASE_BASE_URI.toString()));
+    }
+
+    private static String requireManagedVersion(ElideExtension extension) {
+        String version = extension.getRuntimeVersion().getOrNull();
+        if (version == null || version.isBlank()) {
+            throw new org.gradle.api.GradleException("Elide " + effectiveMode(extension)
+                    + " runtime requires a concrete version; configure elide.runtime.version "
+                    + "or versionFrom in settings");
+        }
+        return version;
     }
 }

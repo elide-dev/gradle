@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuntimeSelectionFunctionalTest {
@@ -28,6 +27,32 @@ class RuntimeSelectionFunctionalTest {
         assertConfigurationIsPure(false);
     }
 
+    @Test
+    void missingPathRuntimeIsNotResolvedByConfigurationOnlyTasks() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("missing-path-project");
+        Path emptyPath = projectDirectory.resolve("empty-path");
+        Files.createDirectories(emptyPath);
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                    id 'java'
+                }
+                elide { runtime { mode = dev.elide.gradle.ElideRuntimeMode.PATH } }
+                """);
+
+        BuildResult help = configuredRunner(projectDirectory, environmentWithPath(emptyPath))
+                .withArguments("help", "--configuration-cache")
+                .build();
+        BuildResult compile = configuredRunner(projectDirectory, environmentWithPath(emptyPath))
+                .withArguments("compileJava", "--configuration-cache")
+                .buildAndFail();
+
+        assertTrue(help.getOutput().contains("BUILD SUCCESSFUL"), help.getOutput());
+        assertTrue(compile.getOutput().contains(
+                "Elide PATH runtime was requested but no executable was found"), compile.getOutput());
+    }
+
     private void assertConfigurationIsPure(boolean explicitRuntime) throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("project");
         Path executableDirectory = projectDirectory.resolve("bin");
@@ -41,6 +66,11 @@ class RuntimeSelectionFunctionalTest {
                     "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
         }
         executable.toFile().setExecutable(true);
+        Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
+        Files.writeString(projectDirectory.resolve("src/main/java/example/Fixture.java"), """
+                package example;
+                public final class Fixture { }
+                """);
         Files.writeString(projectDirectory.resolve("settings.gradle"), "");
         Files.writeString(projectDirectory.resolve("build.gradle"), """
                 plugins {
@@ -61,10 +91,18 @@ class RuntimeSelectionFunctionalTest {
         BuildResult second = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
                 .withArguments("--configuration-cache", "help")
                 .build();
+        BuildResult compile = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
+                .withArguments("--configuration-cache", "compileJava")
+                .build();
+        BuildResult cachedCompile = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
+                .withArguments("--configuration-cache", "compileJava")
+                .build();
 
-        assertFalse(Files.exists(invocationLog));
         assertTrue(first.getOutput().contains("Configuration cache entry stored"));
         assertTrue(second.getOutput().contains("Configuration cache entry reused"));
+        assertTrue(compile.getOutput().contains("Configuration cache entry stored"), compile.getOutput());
+        assertTrue(cachedCompile.getOutput().contains("Configuration cache entry reused"), cachedCompile.getOutput());
+        assertTrue(Files.exists(invocationLog));
     }
 
     private GradleRunner configuredRunner(Path projectDirectory, Map<String, String> environment) {

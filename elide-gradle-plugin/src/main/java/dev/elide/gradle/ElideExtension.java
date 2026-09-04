@@ -13,6 +13,7 @@ import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 
 import java.nio.file.Path;
+import javax.inject.Inject;
 
 public class ElideExtension implements ElideExtensionConfig {
     static final String DEFAULT_RUNTIME_VERSION = "1.5.1+20260903";
@@ -122,7 +123,8 @@ public class ElideExtension implements ElideExtensionConfig {
         return activeDevRoot.file("elide.lock.bin");
     }
 
-    ElideExtension(
+    @Inject
+    public ElideExtension(
             Project project,
             ObjectFactory objects,
             Provider<ElideBuildConfiguration> buildConfiguration) {

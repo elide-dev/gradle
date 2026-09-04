@@ -39,8 +39,11 @@ class CompilerIntegrationFunctionalTest {
 
         List<List<String>> invocations = PlatformFixture.readInvocations(invocationLog);
         assertEquals(1, invocations.size());
-        assertEquals(List.of("javac", "--", "-Dfixture.compiler.argument=has a space"),
-                invocations.get(0).subList(0, 3));
+        assertEquals(List.of("javac", "--"), invocations.get(0).subList(0, 2));
+        String argumentFile = invocations.get(0).get(2);
+        assertTrue(argumentFile.startsWith("@"), invocations.toString());
+        assertTrue(Files.readString(Path.of(argumentFile.substring(1)))
+                .contains("-Afixture.compiler.argument=has a space"));
     }
 
     @Test
@@ -251,7 +254,7 @@ class CompilerIntegrationFunctionalTest {
                 tasks.register('recordCompilerConfiguration') {
                     doLast {
                         def compiler = tasks.named('compileJava', org.gradle.api.tasks.compile.JavaCompile).get()
-                        file('compiler-configuration.txt').text = compiler.options.forkOptions.executable + '\\n' + compiler.options.forkOptions.jvmArgs.join('\\n')
+                        file('compiler-configuration.txt').text = compiler.options.forkOptions.executable + '\\n' + compiler.options.forkOptions.allJvmArgs.join('\\n')
                     }
                 }
                 """, StandardOpenOption.APPEND);
@@ -260,11 +263,9 @@ class CompilerIntegrationFunctionalTest {
 
         List<String> configuration = Files.readAllLines(projectDirectory.resolve("compiler-configuration.txt"));
         assertTrue(configuration.get(0).endsWith("java.exe"), configuration.toString());
-        assertEquals("-cp", configuration.get(1));
-        assertEquals("dev.elide.gradle.ElideJavaCompilerLauncher", configuration.get(3));
-        assertTrue(Files.isSameFile(executable, Path.of(configuration.get(4))));
-        assertEquals(List.of("javac", "--", "-Dfixture.compiler.argument=has a space"),
-                configuration.subList(5, 8));
+        assertTrue(configuration.contains(executable.toAbsolutePath().toString()), configuration.toString());
+        assertTrue(configuration.contains("javac"), configuration.toString());
+        assertTrue(configuration.contains("--"), configuration.toString());
     }
 
     private static void writeProject(Path projectDirectory, Path executable, String configuration) throws IOException {
@@ -299,7 +300,7 @@ class CompilerIntegrationFunctionalTest {
                 }
 
                 tasks.withType(JavaCompile).configureEach {
-                    options.forkOptions.jvmArgs.add('-Dfixture.compiler.argument=has a space')
+                    options.compilerArgs.add('-Afixture.compiler.argument=has a space')
                 }
                 """.formatted(groovyQuote(projectDirectory.relativize(executable))));
         Files.writeString(projectDirectory.resolve("src/main/java/example/Fixture.java"), """

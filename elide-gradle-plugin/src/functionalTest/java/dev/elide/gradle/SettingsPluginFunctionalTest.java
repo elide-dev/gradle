@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsPluginFunctionalTest {
@@ -98,6 +99,7 @@ class SettingsPluginFunctionalTest {
         assertTrue(result.getOutput().contains("ELIDE_MODE=MANAGED"), result.getOutput());
         assertTrue(result.getOutput().contains("ELIDE_VERSION=settings-version"), result.getOutput());
         assertTrue(result.getOutput().contains("ELIDE_INSTALL=true"), result.getOutput());
+        assertFalse(result.getOutput().contains("elideInstall"), result.getOutput());
     }
 
     @Test
@@ -200,6 +202,16 @@ class SettingsPluginFunctionalTest {
     }
 
     @Test
+    void managedRuntimeReportsAbsentProviderVersion() throws IOException {
+        assertAbsentManagedVersionFails("MANAGED");
+    }
+
+    @Test
+    void autoFallbackReportsAbsentProviderVersion() throws IOException {
+        assertAbsentManagedVersionFails("AUTO");
+    }
+
+    @Test
     void cleanProjectRuntimeDslOverridesSettingsConvention() throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("project-override");
         Files.createDirectories(projectDirectory.resolve("app"));
@@ -263,5 +275,39 @@ class SettingsPluginFunctionalTest {
                 .withPluginClasspath()
                 .withProjectDir(projectDirectory.toFile())
                 .withTestKitDir(projectDirectory.resolve("test-kit").toFile());
+    }
+
+    private void assertAbsentManagedVersionFails(String mode) throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("absent-version-" + mode.toLowerCase());
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("empty-path"));
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins { id("dev.elide.settings") }
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.%s
+                        version(providers.gradleProperty("missingElideVersion"))
+                    }
+                }
+                include("app")
+                """.formatted(mode));
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide") }
+                elide { compiler = false }
+                """);
+
+        java.util.Map<String, String> environment = new java.util.HashMap<>(System.getenv());
+        environment.put("PATH", projectDirectory.resolve("empty-path").toString());
+        environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
+        BuildResult result = configuredRunner(projectDirectory)
+                .withEnvironment(environment)
+                .withArguments(":app:prepareElideRuntime", "--stacktrace")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains(
+                "Elide " + mode + " runtime requires a concrete version; configure elide.runtime.version "
+                        + "or versionFrom in settings"), result.getOutput());
     }
 }
