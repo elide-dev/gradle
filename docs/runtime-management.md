@@ -119,7 +119,7 @@ is actually requested.
 
 | Diagnostic | Remedy |
 | --- | --- |
-| `Unsupported Elide platform: ...` | Use Linux amd64/arm64, macOS arm64, or Windows amd64 for managed assets; otherwise use PATH/explicit runtime. |
+| `Unsupported Elide platform: ...` | For mapped macOS amd64 with its pinned asset absent, use `PATH` or explicit `elideBin`; unknown operating systems and Windows ARM64 require a supported host/platform because detection fails before runtime selection. |
 | `Unable to download <URI>: HTTP <status>` | Check the version, platform asset, network access, and GitHub release availability; use PATH/explicit runtime if the asset is unavailable. |
 | `Expected one SHA-256 checksum` | Check that the release `.sha256` asset contains exactly one 64-character hexadecimal digest, then retry from the official release. |
 | `SHA-256 mismatch for Elide archive <URI>` | Remove any failed staging files, verify the release/checksum source, retry, and report a changed or corrupt asset. Do not bypass verification. |

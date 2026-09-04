@@ -253,3 +253,13 @@ consumer pre-population docs: no repository smoke -P guard
 unsupported-host fallback: no PATH/explicit promise
 git diff --check: no output
 ```
+
+## Fix round 2/5: unsupported-platform remedy wording
+
+Corrected `docs/runtime-management.md` so the error-remedy row permits `PATH` or explicit `elideBin` only for mapped macOS amd64 when the pinned asset is absent. Unknown operating systems and Windows ARM64 now explicitly require a supported host/platform because detection fails before runtime selection.
+
+```text
+git diff --check
+```
+
+Result: no output, exit 0.
