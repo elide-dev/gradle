@@ -3,9 +3,9 @@ package dev.elide.gradle;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.JavaCompile;
-import org.gradle.api.provider.Provider;
 
 import java.io.File;
 import java.net.URISyntaxException;
@@ -33,31 +33,24 @@ public class ElideGradlePlugin implements Plugin<Project> {
                         });
         ElideExtension extension = new ElideExtension(project, project.getObjects(), buildConfiguration);
         project.getExtensions().add(ELIDE_EXTENSION_NAME, extension);
-
-        project.afterEvaluate(ignored -> configure(project, extension));
-    }
-
-    private void configure(Project project, ElideExtension extension) {
         ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension);
-        boolean mavenInstallerEnabled = enableMavenInstaller(project, extension);
-        boolean installationEnabled = extension.getEnableInstall().get() || mavenInstallerEnabled;
-        TaskProvider<ElideExecTask> installTask = configureInstallTask(
-                project, extension, resolution, installationEnabled);
+        resolution.preparationTask().configure(task -> task.usesService(buildConfiguration));
+        TaskProvider<ElideExecTask> installTask = configureInstallTask(project, extension, resolution);
 
-        if (mavenInstallerEnabled) {
-            installMavenDepsSupport(project, extension);
-        }
-        if (!project.getPluginManager().hasPlugin(JAVA_PLUGIN_ID) || !enableJavaCompiler(project, extension)) {
-            return;
-        }
-
-        project.getTasks().withType(JavaCompile.class).configureEach(task -> {
-            configureJavaCompileToUseElide(task, resolution);
-            addManagedPreparationDependency(task, resolution);
-            if (installTask != null) {
-                task.dependsOn(installTask);
+        project.afterEvaluate(ignored -> {
+            if (enableMavenInstaller(project, extension)) {
+                installMavenDepsSupport(project, extension);
             }
         });
+        project.getPluginManager().withPlugin(JAVA_PLUGIN_ID, ignored ->
+                project.getTasks().withType(JavaCompile.class).configureEach(task -> {
+                    if (!enableJavaCompiler(project, extension)) {
+                        return;
+                    }
+                    configureJavaCompileToUseElide(task, resolution);
+                    addManagedPreparationDependency(task, resolution);
+                    task.dependsOn(installTask);
+                }));
     }
 
     private void configureJavaCompileToUseElide(JavaCompile task, ElideRuntimeResolution resolution) {
@@ -101,12 +94,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
     private TaskProvider<ElideExecTask> configureInstallTask(
             Project project,
             ElideExtension extension,
-            ElideRuntimeResolution resolution,
-            boolean installationEnabled) {
-        if (!installationEnabled) {
-            return null;
-        }
-
+            ElideRuntimeResolution resolution) {
         return project.getTasks().register(
                 ElideTaskName.ELIDE_TASK_INSTALL,
                 ElideExecTask.class,
@@ -121,14 +109,14 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     task.getDevRootInputs().from(project.fileTree(extension.getDevRoot())
                             .exclude("dependencies/**", "elide.lock.bin"));
                     task.getGeneratedDependencyRepository().set(extension.getDevRoot().dir("dependencies/m2"));
+                    task.onlyIf("Elide dependency installation is enabled",
+                            ignored -> extension.getEnableInstall().get() || enableMavenInstaller(project, extension));
                     addManagedPreparationDependency(task, resolution);
                 });
     }
 
     private void addManagedPreparationDependency(Task task, ElideRuntimeResolution resolution) {
-        if (resolution.source() == ElideRuntimeSource.MANAGED) {
-            resolution.preparationTask().ifPresent(task::dependsOn);
-        }
+        task.dependsOn(resolution.preparationTask());
     }
 
     private void installMavenDepsSupport(Project project, ElideExtension extension) {
