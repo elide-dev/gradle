@@ -31,6 +31,7 @@ publishing {
 }
 
 dependencies {
+    testImplementation(gradleTestKit())
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -48,12 +49,20 @@ gradlePlugin {
     website = "https://elide.dev"
     vcsUrl = "https://github.com/elide-dev/gradle"
 
-    val elide by plugins.creating {
+    plugins.create("elide") {
         id = "dev.elide"
         displayName = "Elide Gradle Plugin"
         implementationClass = "dev.elide.gradle.ElideGradlePlugin"
         description = "Use the Elide runtime and build tools from Gradle"
         tags.set(listOf("elide", "graalvm", "java", "javac", "maven", "dependencies", "resolver"))
+    }
+
+    plugins.create("elideSettings") {
+        id = "dev.elide.settings"
+        displayName = "Elide Gradle Settings Plugin"
+        implementationClass = "dev.elide.gradle.ElideSettingsPlugin"
+        description = "Configure the Elide runtime once for a Gradle build"
+        tags.set(listOf("elide", "settings", "toolchain", "dependencies"))
     }
 }
 
