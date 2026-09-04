@@ -87,16 +87,38 @@ gradlePlugin {
 
 // Add a source set and a task for a functional test suite
 val functionalTest: SourceSet by sourceSets.creating
-gradlePlugin.testSourceSets(functionalTest)
 
 configurations[functionalTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
 configurations[functionalTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+
+val compatibilityTest: SourceSet by sourceSets.creating
+gradlePlugin.testSourceSets(functionalTest, compatibilityTest)
+
+configurations[compatibilityTest.implementationConfigurationName].extendsFrom(configurations.testImplementation.get())
+configurations[compatibilityTest.runtimeOnlyConfigurationName].extendsFrom(configurations.testRuntimeOnly.get())
+compatibilityTest.compileClasspath += functionalTest.output
+compatibilityTest.runtimeClasspath += functionalTest.output
+
+dependencies {
+    add(functionalTest.implementationConfigurationName, gradleTestKit())
+    add(compatibilityTest.implementationConfigurationName, gradleTestKit())
+}
 
 val runtimeHome = layout.buildDirectory.dir("elide-runtime")
 
 val functionalTestTask = tasks.register<Test>("functionalTest") {
     testClassesDirs = functionalTest.output.classesDirs
-    classpath = configurations[functionalTest.runtimeClasspathConfigurationName] + functionalTest.output
+    classpath = functionalTest.runtimeClasspath
+}
+
+val compatibilityTestTask = tasks.register<Test>("compatibilityTest") {
+    group = "verification"
+    description = "Runs consumer builds against every supported Gradle version."
+    testClassesDirs = compatibilityTest.output.classesDirs
+    classpath = compatibilityTest.runtimeClasspath
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    })
 }
 
 val downloadElide by tasks.registering(Download::class) {
@@ -127,4 +149,5 @@ val realRuntimeSmoke by tasks.registering(Exec::class) {
 
 tasks.check {
     dependsOn(functionalTestTask)
+    dependsOn(compatibilityTestTask)
 }
