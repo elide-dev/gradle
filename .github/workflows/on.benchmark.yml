@@ -18,9 +18,15 @@ concurrency:
 jobs:
   smoke:
     name: "Verify benchmark fixtures"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
     timeout-minutes: 15
     steps:
+      - name: "Setup: Container tools"
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates curl git unzip
       - name: "Setup: Checkout"
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -48,8 +54,17 @@ jobs:
       contents: read
       id-token: write
     runs-on: codspeed-macro
+    # Elide's pinned Linux ARM64 binary needs glibc 2.39; the runner host has an older libc.
+    container:
+      image: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+      # CodSpeed's profiler configures kernel perf sysctls on the dedicated runner.
+      options: --privileged
     timeout-minutes: 30
     steps:
+      - name: "Setup: Container tools"
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y ca-certificates curl git unzip procps
       - name: "Setup: Checkout"
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

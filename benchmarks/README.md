@@ -23,7 +23,12 @@ compilation, CLI tests, and packaging. It is not an isolated compiler benchmark.
 The shell script overhead is included equally in both variants.
 
 - Gradle is pinned by the repository wrapper (currently 9.7.1).
-- CI uses Temurin `17.0.16+8` and CodSpeed Macro runners. Local runs must set
+- CI uses Temurin `17.0.16+8` and CodSpeed Macro runners, inside a digest-pinned
+  Ubuntu 24.04 container. The pinned Elide Linux ARM64 binary requires glibc 2.39;
+  the Macro runner host's older libc cannot load it. Both variants use the same
+  container, which starts before timing. The measurement container permits
+  CodSpeed's profiler to configure kernel perf sysctls on the dedicated runner.
+  Local runs must set
   `JAVA_HOME` to a Java 17 JDK; measurements from other JDKs/machines are not CI baselines.
 - Both variants use two Gradle workers and disable persistent daemons, the build
   cache, and the configuration cache. Compilation outputs are removed each round.
@@ -74,8 +79,9 @@ build verification above works on macOS; use Linux/CI for CodSpeed measurement.
 and manual dispatch. The CodSpeed action reads root `codspeed.yml` directly and
 uploads wall-clock results. Its action SHA pins the bundled runner version.
 CI artifacts retain preparation verification logs and toolchain metadata.
-An independent GitHub-hosted Ubuntu smoke job verifies both fixtures before the
-measurement job, even when a CodSpeed runner has not yet been enabled.
+An independent GitHub-hosted Ubuntu ARM64 smoke job uses the same container image
+and verifies both fixtures before the measurement job, even when a CodSpeed runner
+has not yet been enabled. Environment artifacts include the OS and glibc version.
 
 The repository must be activated in CodSpeed, and the organization must make its
 `codspeed-macro` runner group available to this public repository. Without that,

@@ -30,4 +30,8 @@ bash benchmarks/verify.sh
   ./gradlew --version
   cat gradle.properties
   uname -a
+  if [[ -f /etc/os-release ]]; then
+    cat /etc/os-release
+    getconf GNU_LIBC_VERSION
+  fi
 } > benchmarks/build/environment.txt
