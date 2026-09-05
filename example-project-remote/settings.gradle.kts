@@ -1,4 +1,10 @@
-// Use `latest` for the latest version, or any other tag, branch, or commit SHA on this project.
-val elidePluginVersion: String by settings
-apply(from = "https://gradle.elide.dev/$elidePluginVersion/elide.gradle.kts")
+plugins {
+    id("dev.elide.settings") version "1.1.0"
+}
 
+elide {
+    runtime {
+        mode = dev.elide.gradle.ElideRuntimeMode.MANAGED
+        version = "1.5.1+20260903"
+    }
+}

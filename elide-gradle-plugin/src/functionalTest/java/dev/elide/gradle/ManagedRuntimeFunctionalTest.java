@@ -181,6 +181,45 @@ class ManagedRuntimeFunctionalTest {
                 result.getOutput());
     }
 
+    @Test
+    void parallelProjectsShareOneManagedRuntimePreparation() throws Exception {
+        FixturePlatform platform = currentPlatform();
+        Path projectDirectory = temporaryDirectory.resolve("parallel-projects");
+        Path gradleUserHome = temporaryDirectory.resolve("parallel-gradle-user-home");
+        byte[] archive = fixtureArchive(platform, temporaryDirectory.resolve("parallel.log"));
+        try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
+            Files.createDirectories(projectDirectory.resolve("one"));
+            Files.createDirectories(projectDirectory.resolve("two"));
+            Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                    import dev.elide.gradle.ElideRuntimeMode
+
+                    plugins { id("dev.elide.settings") }
+                    elide {
+                        runtime {
+                            mode = ElideRuntimeMode.MANAGED
+                            version = "%s"
+                        }
+                    }
+                    include("one", "two")
+                    """.formatted(VERSION));
+            String projectBuild = """
+                    plugins { id("dev.elide") }
+                    elide { compiler = false }
+                    """;
+            Files.writeString(projectDirectory.resolve("one/build.gradle.kts"), projectBuild);
+            Files.writeString(projectDirectory.resolve("two/build.gradle.kts"), projectBuild);
+
+            BuildResult result = runner(projectDirectory, gradleUserHome)
+                    .withArguments("--gradle-user-home", gradleUserHome.toString(), "--parallel",
+                            ":one:prepareElideRuntime", ":two:prepareElideRuntime", releaseBaseUriArgument(server))
+                    .build();
+
+            assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
+            assertEquals(2, server.requests().size());
+            assertTrue(Files.isRegularFile(runtimeDirectory(gradleUserHome, platform).resolve(".complete")));
+        }
+    }
+
     private static void writeProject(Path projectDirectory, Path gradleUserHome, FixturePlatform platform,
                                      Path invocationLog) throws IOException {
         Path executable = runtimeDirectory(gradleUserHome, platform).resolve("bin").resolve(platform.executableName());

@@ -71,7 +71,20 @@ class ConsumerCompatibilityTest {
 
     private static void writeConsumerProject(Path projectDirectory, Path executable) throws IOException {
         Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
-        Files.writeString(projectDirectory.resolve("settings.gradle"), "rootProject.name = 'consumer-compatibility'\n");
+        Files.writeString(projectDirectory.resolve("settings.gradle"), """
+                plugins {
+                    id 'dev.elide.settings'
+                }
+
+                elide {
+                    runtime {
+                        mode = dev.elide.gradle.ElideRuntimeMode.PATH
+                        version = 'fixture-1.0'
+                    }
+                }
+
+                rootProject.name = 'consumer-compatibility'
+                """);
         Files.writeString(projectDirectory.resolve("src/main/java/example/Consumer.java"), """
                 package example;
                 public final class Consumer { }
@@ -83,15 +96,32 @@ class ConsumerCompatibilityTest {
                 }
 
                 elide {
-                    getElideBin().set(file('%s'))
-                    getEnableInstall().set(false)
+                    install = false
+                    compiler = true
+                    runtime.executable = layout.projectDirectory.file('%s')
                 }
                 """.formatted(groovyQuote(executable)));
     }
 
     private static void writeKotlinConsumerProject(Path projectDirectory, Path executable) throws IOException {
         Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
-        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), "rootProject.name = \"consumer-compatibility\"\n");
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+                import dev.elide.gradle.ElideSettingsExtension
+
+                plugins {
+                    id("dev.elide.settings")
+                }
+
+                configure<ElideSettingsExtension> {
+                    runtime {
+                        mode = ElideRuntimeMode.PATH
+                        version = "fixture-1.0"
+                    }
+                }
+
+                rootProject.name = "consumer-compatibility"
+                """);
         Files.writeString(projectDirectory.resolve("src/main/java/example/Consumer.java"), """
                 package example;
                 public final class Consumer { }
@@ -105,11 +135,9 @@ class ConsumerCompatibilityTest {
                 }
 
                 elide {
-                    runtimeMode.set(ElideRuntimeMode.PATH)
-                    runtimeVersion.set("fixture-1.0")
-                    elideBin.set(file("%s"))
-                    enableInstall.set(false)
-                    enableJavaCompiler.set(true)
+                    install = false
+                    compiler = true
+                    runtime.executable = layout.projectDirectory.file("%s")
                 }
                 """.formatted(kotlinQuote(executable)));
     }
