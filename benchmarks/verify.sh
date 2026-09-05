@@ -18,6 +18,16 @@ for variant in javac elide; do
         exit 1
       fi
     done
+    if [[ "$variant" == elide ]]; then
+      # The pinned native compiler reports each source set. Catch accidental fallback to javac.
+      for source_set in main test; do
+        if ! grep -q "Java sources compiled to .$source_set." "$log"; then
+          echo "Elide did not report compiling $source_set in round $round" >&2
+          cat "$log"
+          exit 1
+        fi
+      done
+    fi
     actual=$("$java_command" -cp "benchmarks/$variant/build/libs/hello-cli.jar" \
       dev.elide.benchmark.Main Ada Lovelace)
     if [[ "$actual" != 'Hello, Ada Lovelace!' ]]; then

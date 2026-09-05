@@ -35,7 +35,8 @@ The shell script overhead is included equally in both variants.
   measurement rounds. The CI job has a 30-minute timeout.
 - Preparation verifies two consecutive offline builds of each variant: compilation,
   test execution, JAR and distribution tasks must execute each time, and both JARs
-  must print `Hello, Ada Lovelace!`. Failed commands fail the job.
+  must print `Hello, Ada Lovelace!`. Elide must report native compilation of both
+  source sets, guarding against accidental fallback to javac. Failed commands fail the job.
 
 Keep the series names stable to retain history. Change names when changing the
 measurement contract (for example, adding a warm-daemon or incremental scenario).
