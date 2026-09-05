@@ -1,4 +1,7 @@
 build/
 .gradle/
+.worktrees/
 *.dev/dependencies/*
+**/.dev/elide.build.bin
+**/.dev/elide.lock.v2.bin
 .idea/
