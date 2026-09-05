@@ -27,6 +27,8 @@ The shell script overhead is included equally in both variants.
   `17.0.16+8`, inside a digest-pinned Ubuntu 24.04 container. Both variants use the same
   container, which starts before timing. The measurement container permits
   CodSpeed's profiler to configure kernel perf sysctls on the benchmark runner.
+  `CODSPEED_ISOLATION=false` uses the runner/container CPU allocation without
+  requesting a second systemd scope inside the container.
   Local runs must set
   `JAVA_HOME` to a Java 17 JDK; measurements from other JDKs/machines are not CI baselines.
 - Both variants use two Gradle workers and disable persistent daemons, the build

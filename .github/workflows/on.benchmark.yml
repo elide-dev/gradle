@@ -87,6 +87,9 @@ jobs:
         run: bash benchmarks/prepare.sh
       - name: "Measure: Wall clock builds"
         uses: CodSpeedHQ/action@373d6868929f444bc08d901fd0eb0ad52a8875ea # v5.2.1
+        env:
+          # Use the benchmark runner/container CPU allocation; there is no systemd in this image.
+          CODSPEED_ISOLATION: "false"
         with:
           mode: walltime
       - name: "Reports: Environment and verification logs"
