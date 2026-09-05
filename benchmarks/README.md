@@ -23,11 +23,10 @@ compilation, CLI tests, and packaging. It is not an isolated compiler benchmark.
 The shell script overhead is included equally in both variants.
 
 - Gradle is pinned by the repository wrapper (currently 9.7.1).
-- CI uses Temurin `17.0.16+8` and GitHub `ubuntu-24.04-arm` runners, inside a digest-pinned
-  Ubuntu 24.04 container. The pinned Elide Linux ARM64 binary requires glibc 2.39;
-  older libc versions cannot load it. Both variants use the same
+- CI measures on Elide's dedicated `linux-amd64-bench` cluster using Temurin
+  `17.0.16+8`, inside a digest-pinned Ubuntu 24.04 container. Both variants use the same
   container, which starts before timing. The measurement container permits
-  CodSpeed's profiler to configure kernel perf sysctls on the ephemeral runner.
+  CodSpeed's profiler to configure kernel perf sysctls on the benchmark runner.
   Local runs must set
   `JAVA_HOME` to a Java 17 JDK; measurements from other JDKs/machines are not CI baselines.
 - Both variants use two Gradle workers and disable persistent daemons, the build
@@ -79,9 +78,9 @@ build verification above works on macOS; use Linux/CI for CodSpeed measurement.
 and manual dispatch. The CodSpeed action reads root `codspeed.yml` directly and
 uploads wall-clock results. Its action SHA pins the bundled runner version.
 CI artifacts retain preparation verification logs and toolchain metadata.
-An independent GitHub-hosted Ubuntu ARM64 smoke job uses the same container image
-and verifies both fixtures before the measurement job, even when a CodSpeed runner
-has not yet been enabled. Environment artifacts include the OS, glibc version,
+An independent GitHub-hosted Ubuntu AMD64 smoke job uses the same container image
+and verifies both fixtures before measurement on `linux-amd64-bench`.
+Environment artifacts include the OS, glibc version,
 page size, and CPU features, and are captured before compilation so startup
 failures retain diagnostics.
 
@@ -90,13 +89,14 @@ The repository must be activated in CodSpeed. Public uploads use GitHub OIDC
 [CodSpeed authentication](https://codspeed.io/docs/integrations/ci/github-actions/configuration)
 and [walltime guidance](https://codspeed.io/docs/instruments/walltime).
 
-GitHub-hosted measurements have higher variance than dedicated Macro runners.
-Use these initial series for trends and investigation; do not enforce small
-regression thresholds. The pinned Elide runtime fails Graal's CPU feature check
-(isolate error 23) on current CodSpeed Macro hardware, even with compatible glibc.
-Returning to Macro runners requires a compatible runtime build or newer hardware;
-do not bypass the CPU check or use emulation for performance measurements. Establish
-new series/baselines when changing runner hardware.
+The benchmark job requires the `linux-amd64-bench` runner label to be available to
+this repository. Keep machines serving that label consistent in CPU and operating
+environment; establish new series/baselines when changing runner hardware.
+
+Two Elide Linux ARM64 compatibility failures observed on CodSpeed Macro runners
+are tracked separately: [glibc symbol requirements](https://github.com/elide-dev/WHIPLASH/issues/1739)
+and [CPU feature requirements](https://github.com/elide-dev/WHIPLASH/issues/1738).
+The benchmarks execute natively on the AMD64 cluster, without emulation or CPU-check overrides.
 
 PR comparisons need a recorded baseline. The first merge to `main` seeds that
 baseline; stacked branches may initially show results without a base comparison.
