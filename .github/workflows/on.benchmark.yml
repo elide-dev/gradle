@@ -36,6 +36,8 @@ jobs:
         with:
           distribution: temurin
           java-version: "17.0.16+8"
+      - name: "Setup: Trust mounted checkout"
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: "Prepare and verify both builds"
         run: bash benchmarks/prepare.sh
       - name: "Reports: Verification logs"
@@ -78,6 +80,8 @@ jobs:
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
         with:
           cache-disabled: true
+      - name: "Setup: Trust mounted checkout"
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: "Prepare and verify both builds"
         run: bash benchmarks/prepare.sh
       - name: "Measure: Wall clock builds"
