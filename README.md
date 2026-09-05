@@ -136,6 +136,9 @@ project directory; failures identify the executable, working directory, exit cod
 
 ### Compilation cache and persistent workers
 
+Track end-to-end Java CLI build time with the [CodSpeed build benchmarks](benchmarks/README.md),
+which compare stock javac and Elide using identical sources, tests, and packaging.
+
 `compileJava` and `compileTestJava` retain Gradle's standard task types, classpath analysis, outputs, and lifecycle wiring.
 With `--build-cache`, compiled output can be restored after `clean` or from another checkout. Compiler executable content,
 the launcher, runtime version, platform, managed-distribution checksum, and JVM/classpath environment overrides are inputs.
