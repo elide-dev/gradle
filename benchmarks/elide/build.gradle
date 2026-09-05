@@ -1,0 +1,17 @@
+buildscript {
+    // Prepared from this checkout before timing; no included plugin build in the measured graph.
+    dependencies {
+        classpath files('../build/elide-gradle-plugin.jar')
+    }
+}
+
+apply from: '../shared/build.gradle'
+apply plugin: 'dev.elide'
+
+elide {
+    dependencyMode.set(dev.elide.gradle.ElideDependencyMode.GRADLE)
+    runtime {
+        mode = dev.elide.gradle.ElideRuntimeMode.MANAGED
+        version = '1.5.1+20260903'
+    }
+}
