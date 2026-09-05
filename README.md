@@ -95,6 +95,30 @@ old manual `elide-javac` setup.
 
 ### Dependency installation
 
+For Gradle-owned JVM dependencies, select the explicit Gradle mode:
+
+```kotlin
+import dev.elide.gradle.ElideDependencyMode
+
+elide {
+    dependencyMode.set(ElideDependencyMode.GRADLE)
+    persistentCompiler.set(true)
+}
+
+dependencies {
+    implementation(libs.guava)
+}
+
+dependencyLocking { lockAllConfigurations() }
+```
+
+This mode rejects `install = true` and the legacy Maven installer override. Gradle resolves and verifies the compiler's
+classpath using its normal repositories, version catalogs, conflict resolution, lockfiles, and offline policy.
+`elideExportDependencies` writes a sorted inventory for every Java source set under `build/elide/dependencies/`, with
+selected runtime-classpath coordinates, artifact filenames, and SHA-256 checksums. The reports are cacheable and contain no machine paths.
+They describe Gradle's selected artifacts; they do not import `elide.pkl`, read or rewrite `elide.lock.bin`, or create a
+second dependency lock. Existing Elide-manifest-driven installation remains available in the legacy mode below.
+
 Set `install = true` to run `elide install` before Java compilation. When Maven integration is enabled, the plugin
 adds the generated `.dev/dependencies/m2` repository for dependency resolution. The manifest defaults to `elide.pkl` and
 can be changed with `manifest`:
@@ -109,6 +133,48 @@ elide {
 
 Installation is opt-in and runs as a Gradle task, not while the plugin is being applied. The Elide command runs from the
 project directory; failures identify the executable, working directory, exit code, and bounded diagnostic output.
+
+### Compilation cache and persistent workers
+
+`compileJava` and `compileTestJava` retain Gradle's standard task types, classpath analysis, outputs, and lifecycle wiring.
+With `--build-cache`, compiled output can be restored after `clean` or from another checkout. Compiler executable content,
+the launcher, runtime version, platform, managed-distribution checksum, and JVM/classpath environment overrides are inputs.
+Gradle still controls incremental recompilation and stale class removal. Local and remote caches use the same task keys;
+configure your remote cache using normal Gradle settings.
+
+Set `persistentCompiler.set(true)` to use Elide's existing Bazel worker protocol. A build service keeps up to four native
+compiler processes warm, reusing compatible executable/working-directory pairs. Main and test compilation can share a
+process, while independent requests can use separate workers. Requests include content digests for classpath JARs so
+Elide can use its opt-in warm classpath cache when annotation processing and compiler flags permit it.
+
+Workers close at the end of the build; this is not a daemon shared between Gradle invocations. Each request has a five-minute
+timeout. Native worker mode does not support `forkOptions.jvmArgs`; leave persistence disabled for those configurations.
+The one-shot compiler remains the default. Explicit/PATH installations must keep accompanying toolchain resources stable;
+declare any additional compiler-affecting files or environment variables as task inputs when using a custom installation.
+
+### Java and Kotlin formatting
+
+The same settings-selected Elide runtime powers `javaformat` and `ktfmt`:
+
+```shell
+./gradlew elideCheckFormat --build-cache
+./gradlew elideFormat
+```
+
+`elideJavaFormat` and `elideKtfmt` create cacheable formatted copies under `build/elide/formatted/`. `elideCheckFormat`
+compares these copies with source files without changing them; `elideFormat` explicitly applies the changes. By default,
+these tasks cover `.java`, `.kt`, and `.kts` files under `src/`. They are opt-in tasks and do not run during compilation.
+The formatters currently use one-shot Elide invocations; the compiler worker protocol is not exposed by the formatter CLI.
+
+```kotlin
+tasks.named<dev.elide.gradle.ElideFormatTask>("elideKtfmt") {
+    arguments.set(listOf("--kotlinlang-style"))
+}
+tasks.named("check") { dependsOn("elideCheckFormat") }
+```
+
+Formatter arguments accept style/import options; check, stdin, output, and arbitrary file arguments are rejected so a
+successful cache entry always represents formatted copies of the declared sources.
 
 ### What this plugin does
 
@@ -144,3 +210,5 @@ dependencies while constructing the task graph or storing the configuration cach
 (see Gradle's [dependency substitution rules](https://docs.gradle.org/current/userguide/resolution_rules.html#sec:dependency_substitution_rules)).
 Changes to the Elide manifest require another preparation invocation. The default example uses Gradle-owned dependency
 resolution so a fresh checkout works in one command.
+
+See [integration testing](docs/testing.md) for the required native CI suite, coverage boundaries, and benchmark follow-up.

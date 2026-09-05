@@ -36,6 +36,12 @@ public class ElideExtension implements ElideExtensionConfig {
     protected Property<Boolean> enableDebugMode;
     protected Property<Boolean> enableVerboseMode;
     private final ElideProjectRuntimeSettings runtime;
+    private final Property<Boolean> persistentCompiler;
+    private final Property<ElideDependencyMode> dependencyMode;
+
+    /** Reuse Elide's Bazel compiler worker during this Gradle build. */
+    public Property<Boolean> getPersistentCompiler() { return persistentCompiler; }
+    public Property<ElideDependencyMode> getDependencyMode() { return dependencyMode; }
     @PathSensitive(PathSensitivity.RELATIVE) protected RegularFileProperty projectManifest;
     @PathSensitive(PathSensitivity.ABSOLUTE) protected RegularFileProperty activeElideBin;
     @PathSensitive(PathSensitivity.RELATIVE) protected DirectoryProperty activeDevRoot;
@@ -129,6 +135,8 @@ public class ElideExtension implements ElideExtensionConfig {
             ObjectFactory objects,
             Provider<ElideBuildConfiguration> buildConfiguration) {
         this.activeProject = project;
+        this.persistentCompiler = objects.property(Boolean.class).convention(false);
+        this.dependencyMode = objects.property(ElideDependencyMode.class).convention(ElideDependencyMode.LEGACY);
         this.doEnableInstall = objects.property(Boolean.class).convention(enableInstall);
         this.doEmbeddedBuild = objects.property(Boolean.class).convention(useBuildEmbedded);
         this.doUseMavenIntegration = objects.property(Boolean.class).convention(enableMavenIntegration);
