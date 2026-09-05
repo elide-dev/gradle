@@ -55,11 +55,13 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    runs-on: codspeed-macro
-    # Elide's pinned Linux ARM64 binary needs glibc 2.39; the runner host has an older libc.
+    # The pinned Elide image fails its CPU feature check on current CodSpeed Macro hardware.
+    # Use the same compatible ARM64 runner as smoke until a portable runtime is available.
+    runs-on: ubuntu-24.04-arm
+    # Keep userspace identical to smoke, including Elide's required glibc 2.39.
     container:
       image: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
-      # CodSpeed's profiler configures kernel perf sysctls on the dedicated runner.
+      # CodSpeed's profiler configures kernel perf sysctls on the ephemeral runner.
       options: --privileged
     timeout-minutes: 30
     steps:

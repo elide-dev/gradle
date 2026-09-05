@@ -7,6 +7,20 @@ export GRADLE_USER_HOME="$root/benchmarks/build/gradle-home"
 cd "$root"
 mkdir -p benchmarks/build
 
+# Capture the environment before compilation, including when runtime startup fails.
+{
+  git rev-parse HEAD
+  ./gradlew --version
+  cat gradle.properties
+  uname -a
+  if [[ -f /etc/os-release ]]; then
+    cat /etc/os-release
+    getconf GNU_LIBC_VERSION
+    getconf PAGESIZE
+    sed -n '1,/^$/p' /proc/cpuinfo
+  fi
+} > benchmarks/build/environment.txt
+
 # Compile the plugin once, outside CodSpeed. The measured consumer loads only its JAR.
 ./gradlew --no-daemon --console=plain :elide-gradle-plugin:jar
 version=$(sed -n 's/^version=//p' gradle.properties)
@@ -23,15 +37,3 @@ for variant in javac elide; do
 done
 
 bash benchmarks/verify.sh
-
-# Keep toolchain identity with the CI artifacts for later interpretation.
-{
-  git rev-parse HEAD
-  ./gradlew --version
-  cat gradle.properties
-  uname -a
-  if [[ -f /etc/os-release ]]; then
-    cat /etc/os-release
-    getconf GNU_LIBC_VERSION
-  fi
-} > benchmarks/build/environment.txt
