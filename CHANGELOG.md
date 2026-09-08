@@ -10,6 +10,9 @@ release is cut.
 
 ### Added
 
+- Added the `dev.elide.settings` plugin for build-wide Elide runtime policy with explicit per-project opt-in.
+- Added direct, provider-backed, and version-catalog runtime version sources through the settings `elide.runtime` DSL.
+- Added shared managed-runtime coordination for parallel multi-project builds and Isolated Projects coverage.
 - Added `AUTO`, `PATH`, and `MANAGED` runtime-selection modes. `AUTO` prefers an explicitly configured executable, then
   a usable executable on `PATH`, and finally the managed runtime.
 - Added the independently configurable `runtimeVersion`, pinned by default to Elide `1.5.1+20260903`.
@@ -35,6 +38,8 @@ release is cut.
 
 ### Changed
 
+- Replaced remote-script installation with the conventional settings plugin and concise `install`, `compiler`, `maven`,
+  and nested `runtime` project configuration.
 - Upgraded the repository wrapper to Gradle 9.7.1 with distribution checksum verification. This changes the build used
   to develop the plugin, not the supported consumer minimum of Gradle 7.6.4.
 - Standardized published plugin classes on Java 17 bytecode while testing supported newer JDK/Gradle pairs separately.
@@ -76,6 +81,7 @@ release is cut.
 
 ### Removed
 
+- Removed the remotely applied `elide.gradle.kts` bootstrap script.
 - Removed the `elide-javac` shim and its CI setup script.
 - Removed the requirement to preinstall Elide for managed-mode builds.
 - Removed normal obsolete tests that depended on the developer's real `PATH`, a pre-created Java-home shim, or live

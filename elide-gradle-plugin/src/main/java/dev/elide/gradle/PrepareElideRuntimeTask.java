@@ -36,8 +36,13 @@ import java.util.UUID;
 public abstract class PrepareElideRuntimeTask extends DefaultTask {
     @Inject
     public PrepareElideRuntimeTask() {
+        onlyIf("the selected Elide runtime is managed",
+                ignored -> getRuntimeSource().get() == ElideRuntimeSource.MANAGED);
         getOutputs().upToDateWhen(ignored -> cacheEntryIsComplete());
     }
+
+    @Input
+    public abstract Property<ElideRuntimeSource> getRuntimeSource();
 
     @Input
     public abstract Property<String> getRuntimeVersion();

@@ -1,5 +1,5 @@
 plugins {
-  alias(elideRuntime.plugins.elide)
+  id("dev.elide")
   java
   application
 }
@@ -11,10 +11,10 @@ application {
 elide {
   // Use Elide instead of Gradle to resolve and download dependencies. Note that Elide uses Maven's resolver semantics
   // by default, so this may produce a different dependency graph than Gradle.
-  enableInstall = true
+  install = true
 
   // Use Elide to compile the project instead of stock `javac`.
-  enableJavaCompiler = true
+  compiler = true
 
   // Use the project's `elide.pkl` manifest to resolve dependencies and create tasks.
   manifest = layout.projectDirectory.file("elide.pkl")

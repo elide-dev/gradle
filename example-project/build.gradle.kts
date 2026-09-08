@@ -19,7 +19,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 elide {
   // Use Elide to compile the project instead of stock `javac`.
-  enableJavaCompiler.set(true)
+  compiler = true
 }
 
 dependencies {

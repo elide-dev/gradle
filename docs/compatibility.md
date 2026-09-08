@@ -28,51 +28,75 @@ cache contract.
 
 1. Remove the manually created `$JAVA_HOME/bin/elide-javac` (or `%JAVA_HOME%\\bin\\elide-javac`) file. The plugin now
    launches the selected Elide executable through its Java entry point and never writes below `JAVA_HOME`.
-2. Choose a runtime mode in `build.gradle.kts`:
+2. Install and configure the settings plugin once in `settings.gradle.kts`:
 
    ```kotlin
    import dev.elide.gradle.ElideRuntimeMode
 
+   plugins {
+       id("dev.elide.settings") version "1.1.0"
+   }
+
    elide {
-       runtimeMode.set(ElideRuntimeMode.AUTO)
+       runtime {
+           mode = ElideRuntimeMode.AUTO
+       }
    }
    ```
 
    `AUTO` preserves an installed PATH workflow by checking explicit and PATH executables before managed fallback. Choose
    `PATH` to guarantee that a build never downloads a runtime, or `MANAGED` to require a versioned cache entry.
-3. For reproducible builds, pin both the plugin version and the managed runtime version rather than using moving labels:
+3. Apply `dev.elide` only in projects that use Elide. Sibling projects remain untouched:
+
+   ```kotlin
+   plugins {
+       id("dev.elide")
+   }
+   ```
+
+4. For reproducible builds, pin both the settings-plugin version and the managed runtime version rather than using
+   moving labels:
 
    ```kotlin
    import dev.elide.gradle.ElideRuntimeMode
 
    elide {
-       runtimeMode.set(ElideRuntimeMode.MANAGED)
-       runtimeVersion.set("1.5.1+20260903")
+       runtime {
+           mode = ElideRuntimeMode.MANAGED
+           version = "1.5.1+20260903"
+       }
    }
    ```
 
    The plugin version (`dev.elide.gradle:elide-gradle-plugin`) and Elide runtime version are independent coordinates.
-4. For an offline managed build, pre-populate the cache while connected:
+   A catalog version can be used instead with `runtime { versionFrom("libs", "elide") }`.
+
+5. For an offline managed build, pre-populate the cache while connected:
 
    ```bash
    ./gradlew prepareElideRuntime
    ./gradlew --offline build
    ```
 
-   The managed `runtimeMode` and `runtimeVersion` are configured in the preceding `build.gradle.kts` snippet; the
+   The managed mode and version are configured in the preceding `settings.gradle.kts` snippet; the
    `prepareElideRuntime` command takes no runtime-mode project property. The second command reuses the completed cache.
    If preparation is attempted offline without a completed entry, it fails with the exact version and cache path; see
    [offline behavior](runtime-management.md#offline-builds-and-network-guarantees). The repository's
    `-Pelide.runtime.mode=MANAGED` flag is only an opt-in guard for its real-runtime smoke task, not consumer plugin
    configuration.
 
-Existing `resolveElideFromPath` assignments remain source-compatible but are deprecated. Prefer `runtimeMode` for new
-builds. Existing PATH builds that remove the shim and leave Elide installed on PATH can use `AUTO` or `PATH`; existing
-managed builds should set `MANAGED` and an explicit `runtimeVersion`.
+Gradle 7.6 does not generate a type-safe Kotlin DSL accessor for a binary settings plugin. On that compatibility floor,
+import `dev.elide.gradle.ElideSettingsExtension` and use
+`configure<ElideSettingsExtension> { runtime { ... } }`; Gradle 8 and newer can use the concise `elide { ... }` form.
+
+Existing `resolveElideFromPath`, `runtimeMode`, and `runtimeVersion` project assignments remain source-compatible. Prefer
+the settings-level `runtime` block for new builds. Existing PATH builds that remove the shim and leave Elide installed
+on PATH can use `AUTO` or `PATH`; existing
+managed builds should set `MANAGED` and an explicit runtime version.
 
 ## Java compilation and installation
 
-When `enableJavaCompiler` is enabled, `JavaCompile` tasks launch the selected executable with the literal argument prefix
-`javac --` through the plugin's Java entry point, preserving Gradle's compiler arguments. When `enableInstall` is enabled, `elideInstall` runs as a task before
+When `compiler = true`, `JavaCompile` tasks launch the selected executable with the literal argument prefix `javac --`
+through the plugin's Java entry point, preserving Gradle's compiler arguments. When `install = true`, `elideInstall` runs as a task before
 Java compilation and can populate `.dev/dependencies/m2` when Maven integration is enabled. Neither command runs while
 the plugin is applied or during configuration.

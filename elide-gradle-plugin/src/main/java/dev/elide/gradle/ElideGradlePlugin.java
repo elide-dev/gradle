@@ -3,15 +3,14 @@ package dev.elide.gradle;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Task;
+import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.compile.JavaCompile;
 
 import java.io.File;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /** Gradle integration for Elide runtime selection, compilation, and dependency installation. */
 public class ElideGradlePlugin implements Plugin<Project> {
@@ -20,52 +19,59 @@ public class ElideGradlePlugin implements Plugin<Project> {
 
     @Override
     public void apply(Project project) {
-        ElideExtension extension = new ElideExtension(project, project.getObjects());
-        project.getExtensions().add(ELIDE_EXTENSION_NAME, extension);
-
-        project.afterEvaluate(ignored -> configure(project, extension));
-    }
-
-    private void configure(Project project, ElideExtension extension) {
+        Provider<ElideBuildConfiguration> buildConfiguration = project.getGradle().getSharedServices()
+                .registerIfAbsent(
+                        ElideBuildConfiguration.SERVICE_NAME,
+                        ElideBuildConfiguration.class,
+                        service -> {
+                            service.getMaxParallelUsages().set(1);
+                            service.getParameters().getRuntimeMode().set(ElideRuntimeMode.AUTO);
+                            service.getParameters().getVersionSource().set(ElideVersionSource.DEFAULT);
+                            service.getParameters().getRuntimeVersion().set(ElideExtension.DEFAULT_RUNTIME_VERSION);
+                        });
+        ElideExtension extension = project.getExtensions().create(
+                ELIDE_EXTENSION_NAME, ElideExtension.class, project, buildConfiguration);
         ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension);
-        boolean mavenInstallerEnabled = enableMavenInstaller(project, extension);
-        boolean installationEnabled = extension.getEnableInstall().get() || mavenInstallerEnabled;
+        resolution.preparationTask().configure(task -> task.usesService(buildConfiguration));
+        Provider<Boolean> mavenInstallerEnabled = mavenInstallerEnabled(project, extension);
+        Provider<Boolean> installEnabled = extension.getEnableInstall()
+                .zip(mavenInstallerEnabled, (install, mavenInstaller) -> install || mavenInstaller);
         TaskProvider<ElideExecTask> installTask = configureInstallTask(
-                project, extension, resolution, installationEnabled);
+                project, extension, resolution, installEnabled);
 
-        if (mavenInstallerEnabled) {
-            installMavenDepsSupport(project, extension);
-        }
-        if (!project.getPluginManager().hasPlugin(JAVA_PLUGIN_ID) || !enableJavaCompiler(project, extension)) {
-            return;
-        }
-
-        project.getTasks().withType(JavaCompile.class).configureEach(task -> {
-            configureJavaCompileToUseElide(task, resolution);
-            addManagedPreparationDependency(task, resolution);
-            if (installTask != null) {
-                task.dependsOn(installTask);
+        project.afterEvaluate(ignored -> {
+            if (mavenInstallerEnabled.get()) {
+                installMavenDepsSupport(project, extension);
             }
         });
+        project.getPluginManager().withPlugin(JAVA_PLUGIN_ID, ignored ->
+                project.getTasks().withType(JavaCompile.class).configureEach(task -> {
+                    if (!enableJavaCompiler(project, extension)) {
+                        return;
+                    }
+                    configureJavaCompileToUseElide(task, resolution);
+                    addManagedPreparationDependency(task, resolution);
+                    task.dependsOn(installTask);
+                }));
     }
 
     private void configureJavaCompileToUseElide(JavaCompile task, ElideRuntimeResolution resolution) {
         var options = task.getOptions();
         options.setFork(true);
-        List<String> existing = Optional.ofNullable(options.getForkOptions().getJvmArgs()).orElseGet(List::of);
-        List<String> arguments = new ArrayList<>(existing.size() + 6);
-        String elideExecutable = resolution.executable().get().getAsFile().getAbsolutePath();
-        // Gradle probes this executable's parent as a JDK, including for local runtimes.
-        // Launch Elide through Java so its installation never needs to contain a JDK.
         options.getForkOptions().setExecutable(javaExecutable().toString());
-        arguments.add("-cp");
-        arguments.add(compilerLauncherClasspath());
-        arguments.add(ElideJavaCompilerLauncher.class.getName());
-        arguments.add(elideExecutable);
-        arguments.add("javac");
-        arguments.add("--");
-        arguments.addAll(existing);
-        options.getForkOptions().setJvmArgs(arguments);
+        ElideCompilerArgumentProvider arguments = task.getProject().getObjects()
+                .newInstance(ElideCompilerArgumentProvider.class);
+        arguments.getElideExecutable().set(resolution.executable());
+        arguments.getLauncherClasspath().from(compilerLauncherFile());
+        arguments.getForwardedJvmArguments().set(task.getProject().provider(() -> {
+            List<String> configured = options.getForkOptions().getJvmArgs();
+            return configured == null ? List.of() : List.copyOf(configured);
+        }));
+        options.getForkOptions().getJvmArgumentProviders().add(arguments);
+        task.doFirst(ignored -> {
+            arguments.getForwardedJvmArguments().finalizeValue();
+            options.getForkOptions().setJvmArgs(List.of());
+        });
     }
 
     private static Path javaExecutable() {
@@ -75,13 +81,12 @@ public class ElideGradlePlugin implements Plugin<Project> {
         return Path.of(System.getProperty("java.home"), "bin", executableName);
     }
 
-    private static String compilerLauncherClasspath() {
+    private static File compilerLauncherFile() {
         try {
             return new File(ElideJavaCompilerLauncher.class.getProtectionDomain()
                     .getCodeSource()
                     .getLocation()
-                    .toURI())
-                    .getAbsolutePath();
+                    .toURI());
         } catch (URISyntaxException exception) {
             throw new IllegalStateException("Unable to locate the Elide compiler launcher", exception);
         }
@@ -91,11 +96,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
             Project project,
             ElideExtension extension,
             ElideRuntimeResolution resolution,
-            boolean installationEnabled) {
-        if (!installationEnabled) {
-            return null;
-        }
-
+            Provider<Boolean> installEnabled) {
         return project.getTasks().register(
                 ElideTaskName.ELIDE_TASK_INSTALL,
                 ElideExecTask.class,
@@ -110,14 +111,13 @@ public class ElideGradlePlugin implements Plugin<Project> {
                     task.getDevRootInputs().from(project.fileTree(extension.getDevRoot())
                             .exclude("dependencies/**", "elide.lock.bin"));
                     task.getGeneratedDependencyRepository().set(extension.getDevRoot().dir("dependencies/m2"));
+                    task.onlyIf("Elide dependency installation is enabled", ignored -> installEnabled.get());
                     addManagedPreparationDependency(task, resolution);
                 });
     }
 
     private void addManagedPreparationDependency(Task task, ElideRuntimeResolution resolution) {
-        if (resolution.source() == ElideRuntimeSource.MANAGED) {
-            resolution.preparationTask().ifPresent(task::dependsOn);
-        }
+        task.dependsOn(resolution.preparationTask());
     }
 
     private void installMavenDepsSupport(Project project, ElideExtension extension) {
@@ -131,12 +131,12 @@ public class ElideGradlePlugin implements Plugin<Project> {
         });
     }
 
-    private boolean enableMavenInstaller(Project project, ElideExtension extension) {
-        Object configured = project.findProperty("elide.builder.maven.install.enable");
-        if (configured != null) {
-            return Boolean.parseBoolean(configured.toString());
-        }
-        return extension.getEnableInstall().get() && extension.getEnableMavenIntegration().get();
+    private Provider<Boolean> mavenInstallerEnabled(Project project, ElideExtension extension) {
+        Provider<Boolean> extensionEnabled = extension.getEnableInstall()
+                .zip(extension.getEnableMavenIntegration(), (install, maven) -> install && maven);
+        return project.getProviders().gradleProperty("elide.builder.maven.install.enable")
+                .map(Boolean::parseBoolean)
+                .orElse(extensionEnabled);
     }
 
     private boolean enableJavaCompiler(Project project, ElideExtension extension) {
