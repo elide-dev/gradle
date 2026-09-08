@@ -10,6 +10,13 @@ release is cut.
 
 ### Added
 
+- Added relocatable Java compilation cache entries while preserving Gradle's incremental analysis and source removal.
+- Added opt-in build-scoped Elide compiler workers using the Bazel protobuf protocol and digest-keyed classpath reuse.
+- Added cacheable staged Java/Kotlin formatting, non-mutating `elideCheckFormat`, and explicit `elideFormat` application.
+- Added explicit Gradle dependency ownership and cacheable per-source-set exports of resolved coordinates and SHA-256 hashes.
+- Required real native CI coverage for both compiler modes, HTTP caches, worker recovery, formatters, and dependency
+  verification; corrected a Gradle 7.6 instrumentation failure in the persistent compiler launcher.
+
 - Added the `dev.elide.settings` plugin for build-wide Elide runtime policy with explicit per-project opt-in.
 - Added direct, provider-backed, and version-catalog runtime version sources through the settings `elide.runtime` DSL.
 - Added shared managed-runtime coordination for parallel multi-project builds and Isolated Projects coverage.

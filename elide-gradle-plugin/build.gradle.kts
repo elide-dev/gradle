@@ -102,6 +102,29 @@ dependencies {
 val functionalTestTask = tasks.register<Test>("functionalTest") {
     testClassesDirs = functionalTest.output.classesDirs
     classpath = functionalTest.runtimeClasspath
+    exclude("**/RealNativeIntegrationFunctionalTest*")
+}
+
+val nativeExecutable = providers.environmentVariable("ELIDE_INTEGRATION_EXECUTABLE")
+tasks.register<Test>("realNativeIntegrationTest") {
+    group = "verification"
+    description = "Requires real Elide and verifies compilation, workers, caches, and formatters."
+    testClassesDirs = functionalTest.output.classesDirs
+    classpath = functionalTest.runtimeClasspath
+    include("**/RealNativeIntegrationFunctionalTest*")
+    javaLauncher.set(javaToolchains.launcherFor {
+        languageVersion.set(JavaLanguageVersion.of(17))
+    })
+    // Always execute external-runtime checks; an earlier skip/cache hit must not mask missing Elide.
+    outputs.upToDateWhen { false }
+    outputs.doNotCacheIf("Verifies the installed native runtime") { true }
+    doFirst {
+        val executable = nativeExecutable.orNull
+        check(!executable.isNullOrBlank() && file(executable).isFile) {
+            "realNativeIntegrationTest requires ELIDE_INTEGRATION_EXECUTABLE pointing to an Elide binary"
+        }
+        environment("ELIDE_INTEGRATION_EXECUTABLE", executable!!)
+    }
 }
 
 val compatibilityTestTask = tasks.register<Test>("compatibilityTest") {

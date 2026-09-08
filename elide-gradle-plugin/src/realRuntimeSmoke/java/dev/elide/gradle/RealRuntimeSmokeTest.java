@@ -141,6 +141,7 @@ class RealRuntimeSmokeTest {
                     enableInstall.set(true)
                     enableMavenIntegration.set(true)
                     enableJavaCompiler.set(true)
+                    persistentCompiler.set(true)
                     manifest.set(layout.projectDirectory.file('elide.pkl'))
                 }
 
