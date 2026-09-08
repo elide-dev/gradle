@@ -8,23 +8,21 @@ application {
   mainClass = "com.example.HelloWorld"
 }
 
+repositories {
+  mavenCentral()
+}
+
+tasks.withType<JavaCompile>().configureEach {
+  // Keep the packaged application runnable on Java 17+, even when Gradle runs on a newer JDK.
+  options.release.set(17)
+}
+
 elide {
-  // Use Elide instead of Gradle to resolve and download dependencies. Note that Elide uses Maven's resolver semantics
-  // by default, so this may produce a different dependency graph than Gradle.
-  enableInstall = true
-
   // Use Elide to compile the project instead of stock `javac`.
-  enableJavaCompiler = true
-
-  // Use the project's `elide.pkl` manifest to resolve dependencies and create tasks.
-  manifest = layout.projectDirectory.file("elide.pkl")
+  enableJavaCompiler.set(true)
 }
 
 dependencies {
-  // Versions are mapped here so that Gradle becomes aware of the classpath needed to build and run the project. Elide
-  // is used to resolve and download these dependencies, even though they are declared here.
-  //
-  // That's because `elide install` creates an `m2`-compatible root (a "local Maven repository") at
-  // `.dev/dependencies/m2`. Gradle picks up the dependencies from there.
+  // Gradle resolves the complete compile/runtime classpath, including transitive dependencies.
   implementation("com.google.guava:guava:33.4.8-jre")
 }

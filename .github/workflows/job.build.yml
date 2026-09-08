@@ -1,64 +1,113 @@
 name: "Job - Build"
 
 "on":
-  workflow_call:
-    inputs:
-      runner:
-        description: "Runner to use for the job"
-        required: false
-        type: string
-        default: "ubuntu-latest"
-  workflow_dispatch:
-    inputs:
-      runner:
-        description: "Runner to use for the job"
-        required: false
-        default: "ubuntu-latest"
+  workflow_call: {}
+  workflow_dispatch: {}
+
+concurrency:
+  group: "build-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
 
 jobs:
-  build:
-    name: "Build"
-    runs-on: ${{ inputs.runner || vars.RUNNER_DEFAULT || 'ubuntu-latest' }}
+  build-wrapper:
+    name: "Build (${{ matrix.os }}, Java 17, wrapper)"
+    runs-on: ${{ matrix.os }}
     permissions:
-      contents: "read"
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            gradle-command: ./gradlew
+          - os: macos-latest
+            gradle-command: ./gradlew
+          - os: windows-latest
+            gradle-command: ./gradlew.bat
     steps:
       - name: "Setup: Harden Runner"
-        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
         with:
           disable-sudo: true
           egress-policy: audit
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
       - name: "Setup: Checkout"
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: "Setup: GraalVM (Java 24)"
-        uses: graalvm/setup-graalvm@01ed653ac833fe80569f1ef9f25585ba2811baab # v1.3.3
+      - name: "Setup: Java 17"
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
-          distribution: "graalvm"
-          java-version: "24"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: "Setup: Elide"
-        uses: elide-dev/setup-elide@a62ce5ca052e16ecd1c6eb3f2efde2e0228d5e80 # main
-        with:
-          version: latest
+          distribution: temurin
+          java-version: "17"
       - name: "Setup: Gradle"
-        uses: gradle/actions/setup-gradle@8379f6a1328ee0e06e2bb424dadb7b159856a326 # v4.4.0
-        id: gradlebuild
-        env:
-          CI: true
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
         with:
-          cache-disabled: true
-      - name: "Setup: Dependencies (Example)"
-        run: cd ./example-project && elide install
-      - name: "Setup: Dependencies (Remote Example)"
-        run: cd ./example-project-remote && elide install
-      - name: "Setup: Gradle Java Compiler Shim"
-        run: cp -fv ./.github/workflows/shim.sh $JAVA_HOME/bin/elide-javac && chmod +x $JAVA_HOME/bin/elide-javac
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: "Build: Projects"
-        run: ./gradlew --stacktrace --info --no-daemon build
-      - name: "Build: Remote Example"
-        run: cd ./example-project-remote && ../gradlew --stacktrace --info --no-daemon build
+        working-directory: .
+        run: ${{ matrix.gradle-command }} --stacktrace --info --no-daemon build compatibilityTest
+      - name: "Integration: Real Elide install, compile, and run"
+        working-directory: .
+        run: ${{ matrix.gradle-command }} --stacktrace --info --no-daemon realRuntimeSmoke --project-prop=elide.runtime.mode=MANAGED
+
+  build-current-toolchain:
+    name: "Build (Ubuntu, Java ${{ matrix.java }}, Gradle ${{ matrix.gradle-version }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - java: "24"
+            gradle-version: "8.14.5"
+          - java: "26"
+            gradle-version: "9.7.1"
+    steps:
+      - name: "Setup: Harden Runner"
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with:
+          disable-sudo: true
+          egress-policy: audit
+      - name: "Setup: Checkout"
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: "Setup: Java 17 toolchain"
+        id: java17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: "Setup: Capture Java 17 home"
+        run: echo "JAVA17_HOME=${{ steps.java17.outputs.path }}" >> "$GITHUB_ENV"
+      - name: "Setup: Java ${{ matrix.java }}"
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: "Setup: Gradle ${{ matrix.gradle-version }}"
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        with:
+          gradle-version: ${{ matrix.gradle-version }}
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: "Diagnostic: Java toolchains"
+        working-directory: .
+        run: |
+          java -version
+          "$JAVA17_HOME/bin/java" -version
+          gradle -Dorg.gradle.java.installations.paths="$JAVA17_HOME" --no-daemon -q javaToolchains
+      - name: "Build: Java 17 baseline"
+        working-directory: .
+        run: gradle -Dorg.gradle.java.installations.paths="$JAVA17_HOME" --stacktrace --info --no-daemon build compatibilityTest
+      - name: "Build: Current consumer pair"
+        working-directory: .
+        run: |
+          java -version
+          printf 'Current JAVA_HOME: %s\n' "$JAVA_HOME"
+          gradle -Dorg.gradle.java.installations.paths="$JAVA_HOME" --stacktrace --info --no-daemon \
+            currentToolchainConsumerTest \
+            -Pelide.currentToolchain.java=${{ matrix.java }} \
+            -Pelide.currentToolchain.gradle=${{ matrix.gradle-version }}

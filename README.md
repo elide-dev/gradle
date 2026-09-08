@@ -1,139 +1,129 @@
 ## Elide Gradle Plugin
 
-Experimental plugin for using [Elide](https://github.com/elide-dev/elide) from within Gradle.
+The Elide Gradle Plugin lets Gradle use Elide for Java compilation and optional Maven dependency installation. Runtime
+selection is explicit, reproducible, and safe to use with the configuration cache.
 
 ### Installation
 
-Make sure to [install Elide](https://docs.elide.dev/installation.html) before proceeding. In GHA, use our
-[`elide-dev/setup-elide`](https://github.com/elide-dev/setup-elide) action to install Elide.
-
-1) Create the `javac` shim in your `JAVA_HOME`:
-
-   **`$JAVA_HOME/bin/elide-javac`**
-    ```bash
-    #!/usr/bin/env bash
-    exec elide javac -- "${@}"
-    ```
-
-    Also, make sure to mark it as executable:
-    ```bash
-    chmod +x $JAVA_HOME/bin/elide-javac
-    ```
-
-2) Install and use the plugin as shown below.
-3) **That's it! Enjoy faster dependency resolution and Java compilation.**
-
-> [!NOTE]
-> We hope to eliminate the `JAVA_HOME` shim soon.
-
-### Usage
+The remote bootstrap script adds the plugin repository and the version catalog. Pin the plugin release in
+`gradle.properties` (or use `latest` while evaluating the plugin):
 
 **`gradle.properties`**
+
 ```properties
-elidePluginVersion=latest
+elidePluginVersion=1.0.0
 ```
 
 **`settings.gradle.kts`**
+
 ```kotlin
-// Use `latest` for the latest version, or any other tag, branch, or commit SHA on this project.
 val elidePluginVersion: String by settings
 apply(from = "https://gradle.elide.dev/$elidePluginVersion/elide.gradle.kts")
 ```
 
 **`build.gradle.kts`**
+
 ```kotlin
 plugins {
-  // The `elideRuntime` catalog is added for you. Add the plugin like this:
-  alias(elideRuntime.plugins.elide)
+    alias(elideRuntime.plugins.elide)
+    java
 }
 
-// Settings here apply on a per-project basis. See below for available settings; all properties
-// are optional, and you don't need to include this block at all if you are fine with defaults.
 elide {
-  // Use Elide's Maven resolver and downloader instead of Gradle's. Defaults to `true` when an
-  // `elide.pkl` file is present in the project root.
-  enableInstall = true
-
-  // Use Elide to compile Java instead of the stock Compiler API facilities used by Gradle.
-  // Defaults to `true` if the plugin is active in the project at all.
-  enableJavaCompiler = true
-
-  // Enable Elide project awareness for Gradle. For example, build scripts can show up as runnable
-  // exec tasks within the Gradle build.
-  enableProjectIntegration = true
-
-  // Set the path to the project manifest, expressed in Pkl format. Elide project manifests can
-  // specify dependencies, build scripts, and other project metadata. Defaults to `elide.pkl` and
-  // automatically finds any present `elide.pkl` in the active project.
-  manifest = layout.projectDirectory.file("elide.pkl")
+    enableJavaCompiler.set(true)
 }
 ```
 
-### What's this?
+Applying the plugin only registers Gradle configuration and task wiring. It does not download or execute Elide, and it
+does not create or modify any file in `JAVA_HOME`. Managed preparation is registered for a managed selection and runs
+when `prepareElideRuntime` is invoked directly or when a consuming task depends on it. Java compilation launches the
+selected executable as `elide javac -- ...` through a small Java entry point; no `elide-javac` shim is required.
 
-Elide is a runtime and batteries-included toolchain for Kotlin/Java, Python, JavaScript, and TypeScript, that can be
-used as a drop-in replacement for `javac` (among other tools).
+### Runtime selection
 
-Elide builds `javac` as a native image and includes it within the Elide binary. This plugin changes your Gradle build
-(as applicable) to use Elide's toolchain facilities instead of Gradle's built-in ones.
+The default `AUTO` mode checks these sources in order:
 
-The result can be a significant performance improvement for **fetching dependencies** and **compiling code**.
+1. An explicit `elideBin` executable, when it is a usable file.
+2. A compatible Elide executable on `PATH`.
+3. The managed runtime in Gradle User Home, using the configured `runtimeVersion`.
 
-Learn more about Elide at [elide.dev](https://elide.dev).
+Use `PATH` to forbid managed runtime archive/checksum downloads and require an installed runtime. Other opt-in tasks such
+as `elide install` may still resolve project dependencies. Use `MANAGED` to require the exact configured version and never
+silently use an installed runtime. The pinned default managed version is `1.5.1+20260903`; set `runtimeVersion` to another
+release when that release publishes a matching asset.
 
-### Features
+```kotlin
+import dev.elide.gradle.ElideRuntimeMode
 
-> [!NOTE]
-> Elide is in beta, and this plugin is experimental. Use at your own risk. Please report any issues you encounter.
+elide {
+    runtimeMode.set(ElideRuntimeMode.MANAGED)
+    runtimeVersion.set("1.5.1+20260903")
+}
+```
 
-- [x] Provide a Gradle plugin
-- [x] Provide a Gradle Catalog
-- [x] Support for `elide install` as Gradle's Maven resolver
-- [x] Support for `elide javac -- ...` as Gradle's Java compiler
-- [x] Use Elide from the user's `PATH`
-- [x] Use a local copy of Elide within the project
-- [ ] Gradle-level Elide download cache
-- [ ] Ability to pin Elide version
-- [ ] Support the configuration cache
-- [ ] Race-and-report vs. `javac`
-- [ ] Augment project metadata for reporting
-- [ ] Generate dependency manifests
+For a local or non-standard executable, configure `elideBin` explicitly:
 
-### How does it work?
+```kotlin
+import dev.elide.gradle.ElideRuntimeMode
 
-[Elide](https://github.com/elide-dev/elide) is a [GraalVM](https://graalvm.org) native image which functions as a Node-
-like runtime. It speaks multiple languages, including Java, Kotlin, Python, JavaScript, TypeScript, WASM, and Pkl.
+elide {
+    runtimeMode.set(ElideRuntimeMode.PATH)
+    elideBin.set(layout.projectDirectory.file("tools/elide"))
+}
+```
 
-In addition to features which run code (i.e. the runtime!), Elide _also_ is a full batteries-included toolchain for
-supported languages, including:
+See [runtime management](docs/runtime-management.md) for cache paths, checksums, offline builds, supported assets, and
+troubleshooting. See [compatibility and migration](docs/compatibility.md) for consumer versions and migration from the
+old manual `elide-javac` setup.
 
-- A drop-in replacement for `javac` and `kotlinc`
-- A drop-in replacement for `jar` and `javadoc`
-- Maven-compatible dependency resolution and fetching
+### Dependency installation
 
-This plugin configures your Gradle build to use Elide's dependency and/or compile features instead of Gradle's.
+Set `enableInstall.set(true)` to run `elide install` before Java compilation. When Maven integration is enabled, the plugin
+adds the generated `.dev/dependencies/m2` repository for dependency resolution. The manifest defaults to `elide.pkl` and
+can be changed with `manifest`:
 
-#### Compiling Java with Elide + Gradle
+```kotlin
+elide {
+    enableInstall.set(true)
+    enableMavenIntegration.set(true)
+    manifest.set(layout.projectDirectory.file("elide.pkl"))
+}
+```
 
-Gradle's `JavaCompile` tasks are configured to use Elide through `isFork = true` and `forkOptions.executable`. These
-point to a shim in the `JAVA_HOME` which invokes `elide javac -- ...` instead of `javac ...`.
+Installation is opt-in and runs as a Gradle task, not while the plugin is being applied. The Elide command runs from the
+project directory; failures identify the executable, working directory, exit code, and bounded diagnostic output.
 
-As a result, JIT warmup is entirely skipped when compiling Java. **Projects under 10,000 classes may see better compiler
-performance, in some cases up to 20x faster than stock `javac`.**
+### What this plugin does
 
-#### Fetching Dependencies with Elide + Gradle
+[Elide](https://elide.dev) is a native toolchain that includes a `javac` replacement and Maven-compatible dependency
+resolution. When enabled, this plugin configures Gradle's `JavaCompile` tasks to launch Elide and optionally
+populates a local Maven repository through `elide install`. Gradle still owns task scheduling, inputs, outputs, and
+dependency resolution semantics outside the opt-in Elide integration.
 
-Elide resolves and fetches Maven dependencies with identical semantics to Maven's own resolver, but again in a native
-image, and with an optimized resolution step (through the use of a checked-in lockfile).
+The repository publishes a Gradle plugin and a version catalog. The project build and published plugin classes are
+covered by the compatibility matrix in [docs/compatibility.md](docs/compatibility.md).
 
-When activated for use with Gradle, a few changes are made to your build:
+### Run the local example
 
-- **An invocation of `elide install`** is added before any Java compilation tasks.
-- **Gradle is configured for a local Maven repo** at `.dev/dependencies/m2`, which is where Elide puts JARs.
-- Thus, when Gradle resolves dependencies, they are _already on disk_ and ready to be used in a classpath.
+With a JDK 17 or newer installed, run:
 
-In this mode, dependencies are downloaded once and then can be used with both Elide and Gradle.
+```bash
+cd example-project
+./gradlew clean build run
+```
 
-> [!WARNING]
-> Fetching dependencies with Elide currently requires an `elide.pkl` manifest listing your Maven dependencies. This will
-> change in the future.
+The example uses the plugin from this checkout, compiles with Elide, and prints `Hello, World!`. Gradle resolves Guava
+and its transitive dependencies from Maven Central and targets Java 17 bytecode. Configuration caching is enabled. No
+manual `elide install` is needed; if Elide is absent from PATH, the plugin prepares the pinned managed runtime. After the first successful build,
+`./gradlew clean build run --offline` can reuse the downloaded dependencies and runtime.
+
+The greeting uses Guava's `SettableFuture`, so building and running it checks both direct and transitive dependencies.
+`./gradlew :elide-gradle-plugin:realRuntimeSmoke` from the repository root also tests a fresh copy of this example with
+a managed runtime, configuration-cache reuse, and an offline rebuild.
+
+The optional Elide-owned dependency installation mode above requires separate preparation when dependencies exist only
+in `.dev/dependencies/m2`: run `./gradlew elideInstall` before invoking `build` or `run`. Gradle can resolve those
+dependencies while constructing the task graph or storing the configuration cache, before task execution begins
+(see Gradle's [dependency substitution rules](https://docs.gradle.org/current/userguide/resolution_rules.html#sec:dependency_substitution_rules)).
+Changes to the Elide manifest require another preparation invocation. The default example uses Gradle-owned dependency
+resolution so a fresh checkout works in one command.

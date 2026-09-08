@@ -7,11 +7,12 @@ plugins {
 val latestElide = findProperty("elide.version")?.toString() ?: error(
   "Please provide the 'elide.version' property in the gradle.properties file or as a command line argument."
 )
-
-group = "dev.elide.gradle"
-version = findProperty("version")?.toString() ?: error(
+val projectVersion = findProperty("version")?.toString() ?: error(
   "Please provide the 'version' property in the gradle.properties file."
 )
+
+group = "dev.elide.gradle"
+version = projectVersion
 
 val mainPluginId = "dev.elide"
 
@@ -24,7 +25,8 @@ val allLibs = listOf(
 catalog {
   versionCatalog {
     version("elide", latestElide)
-    plugin("elide", mainPluginId).versionRef("elide")
+    version("elidePlugin", projectVersion)
+    plugin("elide", mainPluginId).versionRef("elidePlugin")
     allLibs.forEach {
       library(it, "dev.elide", "elide-$it").versionRef("elide")
     }

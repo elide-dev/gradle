@@ -1,0 +1,60 @@
+name: "Scheduled Runtime Smoke"
+
+"on":
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "scheduled-runtime-smoke"
+  cancel-in-progress: false
+
+jobs:
+  real-runtime-smoke:
+    name: "Managed runtime smoke (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            gradle-command: ./gradlew
+          - os: macos-latest
+            gradle-command: ./gradlew
+          - os: windows-latest
+            gradle-command: ./gradlew.bat
+    steps:
+      - name: "Setup: Harden Runner"
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            services.gradle.org:443
+            github.com:443
+            release-assets.githubusercontent.com:443
+            objects.githubusercontent.com:443
+            plugins.gradle.org:443
+            plugins-artifacts.gradle.org:443
+            repo.maven.apache.org:443
+            repo1.maven.org:443
+            maven.pkg.st:443
+            api.adoptium.net:443
+      - name: "Setup: Checkout"
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: "Setup: Java 17"
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: "Setup: Gradle"
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+      - name: "Integration: Real Elide install, compile, and run"
+        working-directory: .
+        run: ${{ matrix.gradle-command }} realRuntimeSmoke -Pelide.runtime.mode=MANAGED
