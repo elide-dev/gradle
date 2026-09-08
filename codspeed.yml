@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
+options:
+  warmup-time: 20s
+  max-rounds: 10
+
+benchmarks:
+  - name: java-cli/clean-build/javac
+    exec: bash benchmarks/run.sh javac
+  - name: java-cli/clean-build/elide
+    exec: bash benchmarks/run.sh elide

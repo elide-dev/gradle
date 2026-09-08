@@ -1,0 +1,35 @@
+apply plugin: 'application'
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+}
+
+sourceSets {
+    main.java.setSrcDirs([file('../shared/src/main/java')])
+    test.java.setSrcDirs([file('../shared/src/test/java')])
+}
+
+application {
+    mainClass = 'dev.elide.benchmark.Main'
+}
+
+// Both variants compile and execute precisely the same tests, without a test framework dependency.
+tasks.register('cliTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.elide.benchmark.CliTest'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+tasks.named('check') {
+    dependsOn tasks.named('cliTest')
+}
+// Tests use the JavaExec harness above, rather than Gradle's framework-based Test task.
+tasks.named('test') {
+    enabled = false
+}
