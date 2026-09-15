@@ -68,9 +68,16 @@ public abstract class ElideVersionProbeSource
     }
 
     /**
-     * Kills the candidate and anything it started. Destroying only the candidate would leave its
-     * children running: the process tree is captured first, because once the parent dies its
-     * descendants are reparented and can no longer be found from it.
+     * Kills the candidate, and any of its children still running under it. The tree is captured
+     * before the parent is destroyed, because descendants are reparented the moment it dies and can
+     * no longer be reached from it.
+     *
+     * <p>This covers the case that matters here: a probe that timed out, where the candidate is
+     * still alive and holding its tree. It cannot cover a candidate that deliberately detaches a
+     * process and then exits normally -- by the time this runs there is nothing left to walk, and
+     * reliably collecting such a process would need the probe to run in a killable process group,
+     * which the JDK does not expose portably. A candidate that backgrounds work is doing so on its
+     * own account; the probe only declines to wait for it.
      */
     private static void terminate(Process process) {
         List<ProcessHandle> descendants = process.descendants().toList();
