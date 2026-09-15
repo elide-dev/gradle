@@ -85,6 +85,17 @@ gradlePlugin {
     }
 }
 
+// The benchmark fixtures load the plugin from a flat classpath rather than resolving it, so they
+// need its runtime dependencies staged alongside the jar. Derived from the real runtime classpath
+// so it cannot drift from the declared dependencies.
+tasks.register<Sync>("benchmarkClasspath") {
+    group = "build"
+    description = "Stages the plugin jar and its runtime dependencies for the benchmark fixtures."
+    from(tasks.named("jar"))
+    from(configurations.named("runtimeClasspath"))
+    into(layout.buildDirectory.dir("benchmark-classpath"))
+}
+
 // Add a source set and a task for a functional test suite
 val functionalTest: SourceSet by sourceSets.creating
 

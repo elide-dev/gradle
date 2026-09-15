@@ -21,11 +21,11 @@ mkdir -p benchmarks/build
   fi
 } > benchmarks/build/environment.txt
 
-# Compile the plugin once, outside CodSpeed. The measured consumer loads only its JAR.
-./gradlew --no-daemon --console=plain :elide-gradle-plugin:jar
-version=$(sed -n 's/^version=//p' gradle.properties)
-cp "elide-gradle-plugin/build/libs/elide-gradle-plugin-$version.jar" \
-  benchmarks/build/elide-gradle-plugin.jar
+# Compile the plugin once, outside CodSpeed. The measured consumer loads it from a flat classpath,
+# so its runtime dependencies are staged alongside the JAR rather than resolved during the build.
+./gradlew --no-daemon --console=plain :elide-gradle-plugin:benchmarkClasspath
+rm -rf benchmarks/build/plugin-classpath
+cp -R elide-gradle-plugin/build/benchmark-classpath benchmarks/build/plugin-classpath
 
 # Resolve the pinned managed runtime and warm Gradle's script/dependency caches.
 for variant in javac elide; do
