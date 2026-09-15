@@ -2,6 +2,8 @@ package dev.elide.gradle;
 
 import org.gradle.api.Project;
 import org.gradle.api.file.RegularFile;
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskProvider;
 
@@ -18,15 +20,17 @@ public final class ElideRuntimeResolver {
     private static final URI DEFAULT_RELEASE_BASE_URI =
             URI.create("https://github.com/elide-dev/elide/releases/download");
     static final String TEST_RELEASE_BASE_URI_PROPERTY = "dev.elide.gradle.test.releaseBaseUri";
+    private static final Logger LOGGER = Logging.getLogger(ElideRuntimeResolver.class);
     private ElideRuntimeResolver() {
     }
 
-    public static ElideRuntimeResolution resolve(Project project, ElideExtension extension) {
+    public static ElideRuntimeResolution resolve(
+            Project project, ElideExtension extension, Provider<ElideBuildConfiguration> buildConfiguration) {
         ElidePlatform platform = ElidePlatform.detect(
                 System.getProperty("os.name"),
                 System.getProperty("os.arch"));
         Provider<String> managedVersion = project.provider(() -> requireManagedVersion(extension));
-        ElideVersionProbe versionProbe = versionProbe(project);
+        ElideVersionProbe versionProbe = versionProbe(project, buildConfiguration);
         Provider<ElideRuntimeSelection> selection = project.provider(() -> {
             ElideRuntimeMode mode = effectiveMode(extension);
             java.util.Optional<Path> explicit = extension.getElideBin().isPresent()
@@ -38,7 +42,7 @@ public final class ElideRuntimeResolver {
                     pathDirectories(project),
                     () -> managedExecutable(project, managedVersion.get(), platform),
                     platform,
-                    requiredRuntimeVersion(extension),
+                    () -> requiredRuntimeVersion(extension),
                     versionProbe);
         });
         Provider<RegularFile> executable = project.getLayout().file(
@@ -61,11 +65,21 @@ public final class ElideRuntimeResolver {
 
     /**
      * The floor a PATH runtime must meet: the version the build would otherwise provision.
-     * Falls back to the pinned default when no version is configured, so selection can still
-     * proceed for modes that never need a managed runtime.
+     *
+     * <p>Resolving it can fail on its own -- a catalog-backed version throws for a missing catalog
+     * or alias -- and modes that never provision must not be broken by that. Such a failure yields
+     * {@code null}, meaning "no floor", which restores the pre-version-check behaviour of accepting
+     * the first usable candidate rather than failing a build that never needed a managed runtime.
      */
     private static ElideVersion requiredRuntimeVersion(ElideExtension extension) {
-        String configured = extension.getRuntimeVersion().getOrNull();
+        String configured;
+        try {
+            configured = extension.getRuntimeVersion().getOrNull();
+        } catch (RuntimeException exception) {
+            LOGGER.info("Unable to resolve the configured Elide runtime version, so the PATH runtime "
+                    + "version check is skipped: {}", exception.getMessage());
+            return null;
+        }
         return ElideVersion.parse(configured == null ? "" : configured)
                 .orElseGet(() -> ElideVersion.parse(ElideExtension.DEFAULT_RUNTIME_VERSION).orElseThrow());
     }
@@ -73,17 +87,25 @@ public final class ElideRuntimeResolver {
     /**
      * Probes a candidate with {@code --version}. Uses Gradle's own exec provider so the result is a
      * tracked configuration-cache input rather than a value baked into the cache entry, and memoizes
-     * per path so a build probes each candidate at most once.
+     * through the shared build service so the whole build probes each candidate at most once rather
+     * than once per project.
+     *
+     * <p>Output is only trusted when the process exits {@code 0}; a foreign binary that rejects
+     * {@code --version} and prints a usage banner must not have a number from that banner read as
+     * its version.
      */
-    private static ElideVersionProbe versionProbe(Project project) {
-        java.util.Map<Path, Optional<String>> probed = new java.util.concurrent.ConcurrentHashMap<>();
-        return executable -> probed.computeIfAbsent(executable, candidate -> {
+    private static ElideVersionProbe versionProbe(
+            Project project, Provider<ElideBuildConfiguration> buildConfiguration) {
+        return executable -> buildConfiguration.get().probedRuntimeVersion(executable, candidate -> {
             try {
                 var output = project.getProviders().exec(spec -> {
                     spec.setExecutable(candidate.toFile());
                     spec.args("--version");
                     spec.setIgnoreExitValue(true);
                 });
+                if (output.getResult().get().getExitValue() != 0) {
+                    return Optional.empty();
+                }
                 return Optional.ofNullable(output.getStandardOutput().getAsText().getOrNull())
                         .filter(text -> !text.isBlank());
             } catch (RuntimeException exception) {

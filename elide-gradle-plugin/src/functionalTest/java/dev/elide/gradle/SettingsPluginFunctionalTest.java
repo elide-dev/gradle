@@ -2,12 +2,15 @@ package dev.elide.gradle;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -199,6 +202,51 @@ class SettingsPluginFunctionalTest {
         assertTrue(result.getOutput().contains(
                 "Elide version alias 'elide' does not exist in catalog 'libs' for project :app"),
                 result.getOutput());
+    }
+
+    @Test
+    void pathModeSucceedsWithAnUnresolvableCatalogVersionWhenAnExecutableIsOnPath() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The PATH fixture is a POSIX shell script.");
+        // PATH mode never provisions a managed runtime, so a catalog version it cannot resolve must
+        // not fail the build. The version check is simply skipped when there is no usable floor.
+        Path projectDirectory = temporaryDirectory.resolve("path-unresolvable-version");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Path executableDirectory = projectDirectory.resolve("bin");
+        Files.createDirectories(executableDirectory);
+        Path executable = executableDirectory.resolve("elide");
+        Files.writeString(executable, "#!/bin/sh\nexit 0\n");
+        executable.toFile().setExecutable(true);
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                other = "1.0"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins { id("dev.elide.settings") }
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.PATH
+                        versionFrom("libs", "elide")
+                    }
+                }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide"); id("java") }
+                """);
+
+        Map<String, String> environment = new HashMap<>(System.getenv());
+        environment.put("PATH", executableDirectory.toString());
+        environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
+        BuildResult result = configuredRunner(projectDirectory)
+                .withEnvironment(environment)
+                .withArguments(":app:compileJava", "--dry-run")
+                .build();
+
+        assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
     }
 
     @Test

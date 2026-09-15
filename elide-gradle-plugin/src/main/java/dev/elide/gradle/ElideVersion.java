@@ -12,19 +12,25 @@ import java.util.regex.Pattern;
  * compared numerically, not lexically, so {@code 1.10.0} is newer than {@code 1.9.9}.
  */
 record ElideVersion(int major, int minor, int patch) implements Comparable<ElideVersion> {
-    private static final Pattern SEMANTIC_VERSION = Pattern.compile("(\\d+)\\.(\\d+)(?:\\.(\\d+))?");
+    /**
+     * Anchored at the start of the input: Elide's {@code --version} output always begins with the
+     * semantic version. Matching anywhere in the text would let any version-shaped number in an
+     * unrelated binary's usage banner be accepted as an Elide version.
+     */
+    private static final Pattern SEMANTIC_VERSION = Pattern.compile("^(\\d+)\\.(\\d+)(?:\\.(\\d+))?");
 
     /**
-     * Extracts the first semantic version in reported text, which may carry a prefix, build
-     * metadata, or trailing detail.
+     * Reads the semantic version at the start of reported text, ignoring any build metadata or
+     * trailing detail that follows it.
      *
-     * @return empty when no version can be read, in which case the runtime is not usable
+     * @return empty when the text does not begin with a version, in which case the runtime is not
+     *         usable
      */
     static Optional<ElideVersion> parse(String reported) {
         if (reported == null || reported.isBlank()) {
             return Optional.empty();
         }
-        Matcher matcher = SEMANTIC_VERSION.matcher(reported);
+        Matcher matcher = SEMANTIC_VERSION.matcher(reported.strip());
         if (!matcher.find()) {
             return Optional.empty();
         }

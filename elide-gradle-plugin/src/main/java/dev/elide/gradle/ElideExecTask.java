@@ -35,21 +35,6 @@ public abstract class ElideExecTask extends DefaultTask {
     private static final int MAX_REDACTION_VALUE_CHARS = 1024;
     private static final int MAX_REDACTION_VALUE_BYTES = MAX_REDACTION_VALUE_CHARS * 3;
     private static final int MAX_REDACTION_VALUES = 256;
-    /**
-     * Values shorter than this carry no secret but collide with ordinary diagnostic text: a
-     * one-character {@code LC_TIME=C} or a two-character {@code DISPLAY=:1} would otherwise be
-     * substituted throughout a compiler error. Measured in UTF-8 bytes so short multibyte secrets
-     * are still redacted.
-     */
-    private static final int MIN_REDACTION_VALUE_BYTES = 6;
-    /**
-     * Only values of variables whose name looks secret-bearing are redacted. Redacting every
-     * inherited value destroys the diagnostic it is meant to protect, because ordinary variables
-     * such as PWD, USER, HOME and DISPLAY match legitimate paths, identifiers and line numbers.
-     */
-    private static final List<String> SENSITIVE_NAME_FRAGMENTS = List.of(
-            "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PASSPHRASE", "CREDENTIAL", "KEY",
-            "AUTH", "SESSION", "COOKIE", "SIGNATURE", "CERT", "PRIVATE", "SALT", "NONCE");
     private static final int MAX_CAPTURE_STORAGE_BYTES = MAX_CAPTURED_OUTPUT_BYTES + MAX_REDACTION_VALUE_BYTES;
     private static final byte[] REDACTION_MARKER = "[redacted]".getBytes(StandardCharsets.UTF_8);
     private static final String TRUNCATION_MARKER = "\n[output truncated after "
@@ -238,7 +223,7 @@ public abstract class ElideExecTask extends DefaultTask {
             List<RedactionValue> values = new ArrayList<>();
             for (java.util.Map.Entry<String, String> variable : System.getenv().entrySet()) {
                 String value = variable.getValue();
-                if (value == null || value.isEmpty() || !isSensitiveName(variable.getKey())) {
+                if (!ElideSecretPolicy.isSensitive(variable.getKey(), value)) {
                     continue;
                 }
                 if (values.size() == MAX_REDACTION_VALUES || value.length() > MAX_REDACTION_VALUE_CHARS) {
@@ -248,23 +233,10 @@ public abstract class ElideExecTask extends DefaultTask {
                 if (bytes.length > MAX_REDACTION_VALUE_BYTES) {
                     return new RedactionPolicy(false, List.of());
                 }
-                if (bytes.length < MIN_REDACTION_VALUE_BYTES) {
-                    continue;
-                }
                 values.add(new RedactionValue(value, bytes));
             }
             values.sort(Comparator.comparingInt((RedactionValue value) -> value.bytes.length).reversed());
             return new RedactionPolicy(true, List.copyOf(values));
-        }
-
-        private static boolean isSensitiveName(String name) {
-            String upperCaseName = name.toUpperCase(java.util.Locale.ROOT);
-            for (String fragment : SENSITIVE_NAME_FRAGMENTS) {
-                if (upperCaseName.contains(fragment)) {
-                    return true;
-                }
-            }
-            return false;
         }
 
         private boolean isSafe() {

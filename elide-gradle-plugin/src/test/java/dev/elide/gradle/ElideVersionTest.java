@@ -38,8 +38,22 @@ class ElideVersionTest {
     }
 
     @Test
-    void readsAVersionCarryingSurroundingText() {
-        assertEquals(new ElideVersion(1, 5, 2), ElideVersion.parse("elide 1.5.2+20260908").orElseThrow());
+    void readsAVersionFollowedByTrailingDetail() {
+        assertEquals(new ElideVersion(1, 5, 2), ElideVersion.parse("1.5.2+20260908 (release)").orElseThrow());
+    }
+
+    @Test
+    void toleratesSurroundingWhitespace() {
+        assertEquals(new ElideVersion(1, 5, 2), ElideVersion.parse("  1.5.2+20260908\n").orElseThrow());
+    }
+
+    @Test
+    void rejectsTextThatDoesNotBeginWithAVersion() {
+        // Elide's --version always starts with the semantic version. Anything else is a foreign
+        // binary, and a version-shaped number inside its output must not be taken as a version.
+        assertEquals(Optional.empty(), ElideVersion.parse("elide 1.5.2+20260908"));
+        assertEquals(Optional.empty(), ElideVersion.parse("usage: frobnicate 2.1 [options]"));
+        assertEquals(Optional.empty(), ElideVersion.parse("error: unknown flag --version (try -v 9.9.9)"));
     }
 
     @Test

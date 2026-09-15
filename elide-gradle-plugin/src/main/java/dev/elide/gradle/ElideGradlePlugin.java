@@ -30,7 +30,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
                         });
         ElideExtension extension = project.getExtensions().create(
                 ELIDE_EXTENSION_NAME, ElideExtension.class, project, buildConfiguration);
-        ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension);
+        ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension, buildConfiguration);
         ElideFormatting.configure(project, resolution);
         ElideDependencies.configure(project);
         resolution.preparationTask().configure(task -> task.usesService(buildConfiguration));

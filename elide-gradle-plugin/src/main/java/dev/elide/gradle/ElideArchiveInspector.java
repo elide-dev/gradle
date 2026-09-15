@@ -27,6 +27,9 @@ import java.util.zip.GZIPInputStream;
  * (1.21 on the Gradle 7.6.4 consumer floor) which may take precedence at runtime.
  */
 final class ElideArchiveInspector {
+    private static final long UNIX_FILE_TYPE_MASK = 0xF000L;
+    private static final long UNIX_SYMLINK = 0xA000L;
+
     private ElideArchiveInspector() {
     }
 
@@ -69,13 +72,23 @@ final class ElideArchiveInspector {
             Enumeration<ZipArchiveEntry> entries = zip.getEntries();
             while (entries.hasMoreElements()) {
                 ZipArchiveEntry entry = entries.nextElement();
-                if (entry.isUnixSymlink()) {
+                if (isSymbolicLink(entry)) {
                     throw new GradleException(
                             "Refusing symbolic link in Elide runtime archive: " + entry.getName());
                 }
                 requireContainedName(entry.getName());
             }
         }
+    }
+
+    /**
+     * Tests the {@code S_IFLNK} bits in the raw external attributes rather than using
+     * {@link ZipArchiveEntry#isUnixSymlink()}, which returns {@code false} unless the entry also
+     * declares the Unix platform. A hostile archive can set the link mode while declaring FAT, and
+     * this is the gate that is supposed to stop it before anything reaches the filesystem.
+     */
+    private static boolean isSymbolicLink(ZipArchiveEntry entry) {
+        return ((entry.getExternalAttributes() >> 16) & UNIX_FILE_TYPE_MASK) == UNIX_SYMLINK;
     }
 
     /**

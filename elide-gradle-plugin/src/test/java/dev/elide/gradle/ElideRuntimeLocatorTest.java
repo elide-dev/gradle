@@ -123,7 +123,7 @@ class ElideRuntimeLocatorTest {
 
         ElideRuntimeSelection selection = ElideRuntimeLocator.locate(
                 PATH, Optional.empty(), List.of(executable.getParent()), () -> managed, WINDOWS,
-                REQUIRED, reporting(CURRENT));
+                () -> REQUIRED, reporting(CURRENT));
 
         assertEquals(ElideRuntimeSource.PATH, selection.source());
         assertEquals(executable, selection.executable());
@@ -214,6 +214,55 @@ class ElideRuntimeLocatorTest {
         assertEquals(ElideRuntimeSource.MANAGED, selection.source());
     }
 
+    @Test
+    void anUnresolvableFloorAcceptsTheFirstUsablePathCandidate() throws IOException {
+        // A catalog-backed runtime.version throws for a missing alias. Modes that never provision
+        // must not be broken by that, so an unknown floor means no version gating at all.
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = ElideRuntimeLocator.locate(
+                PATH, Optional.empty(), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> null,
+                candidate -> {
+                    throw new AssertionError("No floor means no probe");
+                });
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(pathBin, selection.executable());
+    }
+
+    @Test
+    void theFloorIsNotResolvedWhenThereIsNoPathCandidateToJudge() throws IOException {
+        var emptyBin = tempDir.resolve("empty");
+        Files.createDirectories(emptyBin);
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = ElideRuntimeLocator.locate(
+                AUTO, Optional.empty(), List.of(emptyBin), () -> managed, LINUX,
+                () -> {
+                    throw new AssertionError("The floor must not be resolved without a candidate");
+                },
+                reporting(CURRENT));
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
+    @Test
+    void theFloorIsNotResolvedForManagedMode() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = ElideRuntimeLocator.locate(
+                MANAGED, Optional.empty(), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> {
+                    throw new AssertionError("MANAGED must not resolve a PATH floor");
+                },
+                reporting(CURRENT));
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
     private ElideRuntimeSelection locate(ElideRuntimeMode mode, Optional<Path> explicit,
                                          List<Path> pathDirectories, Path managed) {
         return locate(mode, explicit, pathDirectories, managed, reporting(CURRENT));
@@ -223,7 +272,7 @@ class ElideRuntimeLocatorTest {
                                          List<Path> pathDirectories, Path managed,
                                          ElideVersionProbe probe) {
         return ElideRuntimeLocator.locate(
-                mode, explicit, pathDirectories, () -> managed, LINUX, REQUIRED, probe);
+                mode, explicit, pathDirectories, () -> managed, LINUX, () -> REQUIRED, probe);
     }
 
     /** Every candidate reports the same version. */

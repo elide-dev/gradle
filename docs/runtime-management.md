@@ -13,8 +13,6 @@ modifies files below `JAVA_HOME`.
 | --- | --- | --- |
 | `AUTO` | Explicit executable, then the first usable executable on `PATH`, then managed runtime | May download only when it reaches managed fallback |
 | `PATH` | Explicit executable, then the first usable executable on `PATH`; no fallback | Never downloads or extracts a managed runtime; its preparation task is skipped |
-
-A `PATH` candidate is usable only when it also reports a version at least equal to the configured `runtime.version`.
 | `MANAGED` | The configured version and platform cache entry | Downloads on a cache miss unless Gradle is offline |
 
 In `AUTO`, an explicit executable is considered before `PATH`. A PATH lookup preserves directory order and uses the
@@ -162,8 +160,19 @@ preparation is actually requested.
 | `Elide PATH runtime ... reports version ..., but ... or newer is required` | The installed Elide predates the configured `runtime.version`. Upgrade it, lower `runtime.version`, set `runtime.executable` to bypass the check, or choose `MANAGED`. `AUTO` skips the candidate instead of failing. |
 | `Elide command failed: executable ..., working directory ..., exit code ...` | Check the selected executable, project directory, manifest, and bounded standard error/output; fix the Elide command or project inputs and rerun. |
 
-The plugin captures only bounded diagnostics and redacts inherited environment values whose variable name looks
-secret-bearing (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH`, `SESSION` and similar) and whose value is at least six
-bytes long. Ordinary variables such as `PWD`, `USER`, `HOME` and `DISPLAY` are left alone, so paths, identifiers and
-line numbers in a failing command's output stay readable. It does not print the full environment when an Elide
-subprocess fails.
+The plugin captures only bounded diagnostics and redacts inherited environment values that look like credentials. A
+value is redacted when either its name or its own shape says so:
+
+- a name *segment* matches a sensitive word (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH`, `PAT`, `DSN` and similar),
+  with the name split on `_`, `-` and `.`. Matching whole segments rather than substrings is what keeps `KEYBOARD` and
+  `MONKEY` out of it, and a short list of known-benign names (`SSH_AUTH_SOCK`, `XDG_SESSION_TYPE`, `SESSION_MANAGER`
+  and friends) is excluded outright;
+- or the value carries a recognizable credential regardless of its name — a known token prefix such as `ghp_`,
+  `github_pat_`, `xoxb-` or a PEM header, or a URL with inline credentials such as
+  `postgres://user:password@host/db`. This covers conventions like `GH_PAT` and `DATABASE_URL` that say nothing in
+  their name.
+
+Name-matched values must also be at least six bytes long, because substituting a one- or two-character value such as
+`DISPLAY=:1` corrupts far more output than it protects. Ordinary variables such as `PWD`, `USER`, `HOME` and `LANG` are
+left alone, so paths, identifiers and line numbers in a failing command's output stay readable. The plugin does not
+print the full environment when an Elide subprocess fails.

@@ -79,6 +79,10 @@ class RuntimeSelectionFunctionalTest {
                 .buildAndFail();
 
         assertTrue(result.getOutput().contains("is not cached at"), result.getOutput());
+        // The rejection must be visible; otherwise the only symptom is an unexplained download,
+        // or this offline cache-miss failure, with nothing pointing at the installed runtime.
+        assertTrue(result.getOutput().contains("reports version 1.4.9"), result.getOutput());
+        assertTrue(result.getOutput().contains("using the managed runtime instead"), result.getOutput());
     }
 
     @Test

@@ -1,13 +1,19 @@
 package dev.elide.gradle;
 
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
 /** Pure runtime selection logic, independent of Gradle and process execution. */
 public final class ElideRuntimeLocator {
+    private static final Logger LOGGER = Logging.getLogger(ElideRuntimeLocator.class);
+
     private ElideRuntimeLocator() {
     }
 
@@ -17,10 +23,15 @@ public final class ElideRuntimeLocator {
      * <p>An explicit executable is taken as configured and is not version-checked. A {@code PATH}
      * candidate must additionally report at least {@code requiredVersion}; candidates are probed in
      * directory order and probing stops at the first acceptable one. In {@code AUTO} an
-     * out-of-date candidate is simply not usable, so selection continues to the managed runtime.
+     * out-of-date candidate is skipped, so selection continues to the managed runtime.
      *
      * @param managedExecutable supplies the managed path only when it is actually selected, because
      *                          resolving it requires a configured runtime version
+     * @param requiredVersion   supplies the floor a {@code PATH} candidate must meet, queried only
+     *                          when there is a candidate to judge. A {@code null} result means the
+     *                          floor is unknown -- modes that never provision must not fail merely
+     *                          because a managed version cannot be resolved -- and the first usable
+     *                          candidate is then accepted without probing.
      */
     public static ElideRuntimeSelection locate(
             ElideRuntimeMode mode,
@@ -28,7 +39,7 @@ public final class ElideRuntimeLocator {
             List<Path> pathDirectories,
             Supplier<Path> managedExecutable,
             ElidePlatform platform,
-            ElideVersion requiredVersion,
+            Supplier<ElideVersion> requiredVersion,
             ElideVersionProbe versionProbe) {
         if (mode == ElideRuntimeMode.MANAGED) {
             return new ElideRuntimeSelection(ElideRuntimeSource.MANAGED, managedExecutable.get());
@@ -39,33 +50,51 @@ public final class ElideRuntimeLocator {
             return new ElideRuntimeSelection(ElideRuntimeSource.EXPLICIT, explicitExecutable.get());
         }
 
-        List<Path> candidates = pathDirectories.stream()
-                .map(directory -> directory.resolve(platform.executableName()))
-                .filter(path -> usable(path, platform))
-                .toList();
-        Path outdated = null;
-        ElideVersion outdatedVersion = null;
+        List<Path> candidates = new ArrayList<>();
+        for (Path directory : pathDirectories) {
+            Path candidate = directory.resolve(platform.executableName());
+            if (usable(candidate, platform)) {
+                candidates.add(candidate);
+            }
+        }
+
+        ElideVersion floor = candidates.isEmpty() ? null : requiredVersion.get();
+        Path rejected = null;
+        ElideVersion rejectedVersion = null;
         for (Path candidate : candidates) {
-            Optional<ElideVersion> reported = versionProbe.version(candidate).flatMap(ElideVersion::parse);
-            if (reported.isPresent() && reported.get().compareTo(requiredVersion) >= 0) {
+            if (floor == null) {
                 return new ElideRuntimeSelection(ElideRuntimeSource.PATH, candidate);
             }
-            if (outdated == null) {
-                outdated = candidate;
-                outdatedVersion = reported.orElse(null);
+            Optional<ElideVersion> reported = versionProbe.version(candidate).flatMap(ElideVersion::parse);
+            if (reported.isPresent() && reported.get().compareTo(floor) >= 0) {
+                return new ElideRuntimeSelection(ElideRuntimeSource.PATH, candidate);
+            }
+            if (rejected == null) {
+                rejected = candidate;
+                rejectedVersion = reported.orElse(null);
             }
         }
 
         if (mode == ElideRuntimeMode.AUTO) {
+            if (rejected != null) {
+                // Without this the only visible effect is an unexplained managed download, or an
+                // offline cache-miss failure, with nothing pointing at the installed runtime.
+                LOGGER.lifecycle("Elide runtime on PATH ({}) reports version {}, below the required {};"
+                                + " using the managed runtime instead.",
+                        rejected, describe(rejectedVersion), floor);
+            }
             return new ElideRuntimeSelection(ElideRuntimeSource.MANAGED, managedExecutable.get());
         }
-        if (outdated != null) {
-            throw new IllegalStateException("Elide PATH runtime " + outdated + " reports version "
-                    + (outdatedVersion == null ? "an unreadable version" : outdatedVersion)
-                    + ", but " + requiredVersion + " or newer is required; upgrade Elide, set "
+        if (rejected != null) {
+            throw new IllegalStateException("Elide PATH runtime " + rejected + " reports version "
+                    + describe(rejectedVersion) + ", but " + floor + " or newer is required; upgrade Elide, set "
                     + "runtime.executable, or choose MANAGED");
         }
         throw new IllegalStateException("Elide PATH runtime was requested but no executable was found");
+    }
+
+    private static String describe(ElideVersion version) {
+        return version == null ? "an unreadable version" : version.toString();
     }
 
     private static boolean usable(Path path, ElidePlatform platform) {

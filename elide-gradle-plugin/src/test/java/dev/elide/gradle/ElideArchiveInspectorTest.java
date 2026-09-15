@@ -198,6 +198,34 @@ class ElideArchiveInspectorTest {
                 failure.getMessage());
     }
 
+    @Test
+    void rejectsAZipSymlinkThatDeclaresANonUnixPlatform() throws IOException {
+        // isUnixSymlink() only reports a link when the entry also declares the Unix platform, so a
+        // hostile archive can set the link mode while claiming FAT. The gate reads the raw
+        // attributes instead, and must still refuse this.
+        Path archive = zipArchive("fat-symlink.zip", zip -> {
+            writeZipFile(zip, "bin/elide.exe");
+            ZipArchiveEntry link = new ZipArchiveEntry("lib/evil-link");
+            // Setting the attributes directly leaves the platform at its FAT default; only
+            // setUnixMode would mark it Unix, which is exactly what this archive avoids doing.
+            link.setExternalAttributes(0120777L << 16);
+            zip.putArchiveEntry(link);
+            zip.write("/etc/passwd".getBytes(StandardCharsets.UTF_8));
+            zip.closeArchiveEntry();
+        });
+
+        GradleException failure = assertThrows(GradleException.class,
+                () -> ElideArchiveInspector.requireSafeArchive(archive, WINDOWS));
+        assertTrue(failure.getMessage().contains("Refusing symbolic link in Elide runtime archive"),
+                failure.getMessage());
+    }
+
+    private static void writeZipFile(ZipArchiveOutputStream zip, String name) throws IOException {
+        zip.putArchiveEntry(new ZipArchiveEntry(name));
+        zip.write(CONTENT);
+        zip.closeArchiveEntry();
+    }
+
     private static TarArchiveEntry regularTarEntry(String name) {
         TarArchiveEntry entry = new TarArchiveEntry(name);
         entry.setSize(CONTENT.length);

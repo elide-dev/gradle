@@ -11,9 +11,11 @@ release is cut.
 ### Added
 
 - Added a version check for `PATH`-selected runtimes. A candidate must report at least the configured `runtime.version`,
-  compared on the semantic version only. Under `AUTO` an out-of-date installed Elide is now skipped and the managed
-  runtime is provisioned instead of compiling with it; under `PATH` the build fails and names both versions. An explicit
-  `runtime.executable` is never probed.
+  read from the start of its `--version` output and compared on the semantic version only. Under `AUTO` an out-of-date
+  installed Elide is skipped, with the rejected path and both versions logged, and the managed runtime is provisioned
+  instead of compiling with it; under `PATH` the build fails and names both versions. An explicit `runtime.executable` is
+  never probed, and a `runtime.version` that cannot be resolved leaves the check disabled rather than failing a build
+  that never needed a managed runtime.
 - Documented the `elide.builder.javac.enable` and `elide.builder.maven.install.enable` Gradle properties, which override
   the extension in both directions, and added functional coverage for them.
 - Added relocatable Java compilation cache entries while preserving Gradle's incremental analysis and source removal.
@@ -123,8 +125,9 @@ release is cut.
   already rejected a traversing archive with a generic "might be corrupted" message and had flattened symbolic links 
   into empty regular files, so neither documented guard could fire.
 - Cache publication is serialized and staged so concurrent or failed builds cannot publish a partial runtime as valid.
-- Failure diagnostics redact inherited environment values whose variable names look like secrets, without printing the
-  environment and using fixed memory bounds.
+- Failure diagnostics redact inherited environment values that look like credentials, by sensitive name segment or by
+  value shape (known token prefixes, and URLs carrying inline credentials), without printing the environment and using
+  fixed memory bounds.
 - CI actions are pinned to immutable commits and scheduled runtime smoke jobs use blocking, explicitly allow-listed
   egress.
 
