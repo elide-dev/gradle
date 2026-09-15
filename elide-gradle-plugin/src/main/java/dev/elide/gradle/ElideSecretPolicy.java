@@ -31,8 +31,8 @@ import java.util.regex.Pattern;
  *       {@code AUTH} do occur innocently, so the name is split on {@code _}, {@code -} and
  *       {@code .} and a segment must match exactly. This is what keeps {@code KEYBOARD} and
  *       {@code MONKEY} out of it.
- *   <li><b>Value shape.</b> Some names carry credentials without saying so — {@code GH_PAT},
- *       {@code DATABASE_URL} — so a value that looks like a credential is redacted whatever it is
+ *   <li><b>Value shape.</b> Some names carry credentials without saying so -- {@code GH_PAT},
+ *       {@code DATABASE_URL} -- so a value that looks like a credential is redacted whatever it is
  *       called.
  * </ol>
  *

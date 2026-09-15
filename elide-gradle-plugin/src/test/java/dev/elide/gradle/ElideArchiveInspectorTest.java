@@ -45,7 +45,7 @@ class ElideArchiveInspectorTest {
 
     @Test
     void acceptsTheDotSlashPrefixedEntryNamesTheRealReleaseArchiveUses() throws IOException {
-        // The published elide.linux-amd64.tgz stores entries as ./bin/elide, ./lib/... — a leading
+        // The published elide.linux-amd64.tgz stores entries as ./bin/elide, ./lib/... -- a leading
         // "." segment must not be mistaken for traversal.
         Path archive = tarArchive("dot-prefixed.tgz", tar -> {
             tar.putArchiveEntry(regularTarEntry("./bin/elide"));
