@@ -14,11 +14,16 @@ import java.util.regex.Pattern;
  * credential must never reach a build log, and a value that does not must never be substituted into
  * one, because redacting ordinary values destroys the diagnostic the log exists for.
  *
- * <p>A value is first judged on its own: one that cannot hold a recoverable secret -- a couple of
- * bytes or a boolean -- is never redacted, because substituting such a fragment
- * replaces it everywhere it occurs and destroys the diagnostic. Otherwise three independent
- * triggers are used, any of which is sufficient. All name matching is case-insensitive, so a
- * lower-case or camelCase name is treated exactly like a shouting one.
+ * <p>A value under a few bytes is never redacted, whatever its name says: it cannot carry a
+ * recoverable secret, and substituting such a fragment replaces it everywhere it occurs and
+ * destroys the diagnostic. Past that, three independent triggers are used, any of which is
+ * sufficient. All name matching is case-insensitive, so a lower-case or camelCase name is treated
+ * exactly like a shouting one.
+ *
+ * <p>Order matters between them. A name that declares a credential outright is decided before the
+ * value is judged, so {@code MY_PASSWORD=none} and {@code SIGNING_ENABLED=true} are redacted; a
+ * value that merely states a mode is excluded only under a name that is suggestive rather than
+ * explicit, such as {@code AUTH_MODE=off}.
  *
  * <ol>
  *   <li><b>Unambiguous words, matched anywhere in the name.</b> Words such as {@code password},
@@ -56,7 +61,11 @@ final class ElideSecretPolicy {
      */
     private static final int MIN_PREFIXED_CREDENTIAL_CHARS = 12;
 
-    /** Values that state a mode rather than hold a secret, whatever the variable is called. */
+    /**
+     * Values that state a mode rather than hold a secret. Consulted only once an unambiguous
+     * credential name has been ruled out, so a mode-shaped value under a name such as
+     * {@code SIGNING_ENABLED} is still redacted.
+     */
     private static final Set<String> NON_SECRET_VALUES = Set.of(
             "TRUE", "FALSE", "YES", "NO", "ON", "OFF", "NONE", "NULL", "AUTO",
             "ENABLED", "DISABLED", "DEFAULT", "ALWAYS", "NEVER");

@@ -6,6 +6,7 @@ import org.gradle.api.file.RegularFile;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ValueSource;
 import org.gradle.api.tasks.TaskProvider;
 
 import java.io.File;
@@ -143,10 +144,10 @@ public final class ElideRuntimeResolver {
     }
 
     /**
-     * Probes a candidate with {@code --version}. Uses Gradle's own exec provider so the result is a
-     * tracked configuration-cache input rather than a value baked into the cache entry, and memoizes
-     * through the shared build service so the whole build probes each candidate at most once rather
-     * than once per project.
+     * Probes a candidate with {@code --version}. The work runs in a {@link ValueSource} so the
+     * result is a tracked configuration-cache input rather than a value baked into the cache entry,
+     * and is memoized through the shared build service so the whole build probes each candidate at
+     * most once rather than once per project.
      *
      * <p>The probe itself is bounded in time and output; see {@link ElideVersionProbeSource}.
      */

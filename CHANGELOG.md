@@ -88,8 +88,9 @@ release is cut.
 - Fixed failure diagnostics being destroyed by over-broad redaction. Every inherited environment value was previously
   substituted, so ordinary short values such as `DISPLAY=:1` or `LC_TIME=C` mangled line numbers and identifiers in a
   failing command's output. A value is redacted now when its name says it holds a credential, or when the value itself
-  carries one regardless of its name. Only values that cannot hold a recoverable secret are never substituted: those
-  under three UTF-8 bytes, and those stating a mode such as `true` or `off`.
+  carries one regardless of its name. A value under three UTF-8 bytes is never substituted, whatever its name; one that
+  merely states a mode, such as `true` or `off`, is left alone only under a name that does not declare a credential
+  outright, so `AUTH_MODE=off` stays readable while `MY_PASSWORD=none` is redacted.
 - Fixed configuration-time Elide execution and downloads, which previously made basic commands such as `clean` depend
   on a locally installed or downloadable Elide runtime.
 - Fixed the obsolete `1.0.0-beta5` runtime download URL that returned HTTP 404.
