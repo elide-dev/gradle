@@ -44,6 +44,27 @@ record ElideVersion(int major, int minor, int patch) implements Comparable<Elide
         }
     }
 
+    /**
+     * Reads a version the build configured, as opposed to one a binary reported.
+     *
+     * <p>Kept separate from {@link #parse(String)} on purpose. Probe output must stay strictly
+     * anchored so a number in a foreign binary's banner cannot be mistaken for a version, but a
+     * configured version is written by a person and a leading {@code v}, as in {@code v1.6.0}, is a
+     * common tag convention rather than an error.
+     *
+     * @return empty when the value is not a semantic version at all, such as a rich version
+     */
+    static Optional<ElideVersion> parseConfigured(String configured) {
+        if (configured == null) {
+            return Optional.empty();
+        }
+        String normalized = configured.strip();
+        if (normalized.startsWith("v") || normalized.startsWith("V")) {
+            normalized = normalized.substring(1);
+        }
+        return parse(normalized);
+    }
+
     @Override
     public int compareTo(ElideVersion other) {
         int byMajor = Integer.compare(major, other.major);

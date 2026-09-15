@@ -1,5 +1,6 @@
 package dev.elide.gradle;
 
+import org.gradle.api.GradleException;
 import org.gradle.api.Project;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.logging.Logger;
@@ -13,6 +14,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Optional;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 /** Resolves Elide runtime inputs using Gradle-managed providers without starting a process. */
@@ -42,8 +44,9 @@ public final class ElideRuntimeResolver {
                     pathDirectories(project),
                     () -> managedExecutable(project, managedVersion.get(), platform),
                     platform,
-                    () -> requiredRuntimeVersion(extension),
-                    versionProbe);
+                    () -> requiredRuntimeVersion(extension, mode),
+                    versionProbe,
+                    rejectionReporter(buildConfiguration));
         });
         Provider<RegularFile> executable = project.getLayout().file(
                 selection.map(selected -> selected.executable().toFile()));
@@ -66,22 +69,68 @@ public final class ElideRuntimeResolver {
     /**
      * The floor a PATH runtime must meet: the version the build would otherwise provision.
      *
-     * <p>Resolving it can fail on its own -- a catalog-backed version throws for a missing catalog
-     * or alias -- and modes that never provision must not be broken by that. Such a failure yields
-     * {@code null}, meaning "no floor", which restores the pre-version-check behaviour of accepting
-     * the first usable candidate rather than failing a build that never needed a managed runtime.
+     * <p>Two distinct things can go wrong, and they are treated differently.
+     *
+     * <p>Resolution can fail outright -- a catalog-backed version throws for a missing catalog or
+     * alias. Only {@code PATH} tolerates that, because it never provisions, so a version it will
+     * never download must not break it; every other mode is going to need that same version and is
+     * better served by the underlying error than by a runtime chosen without a check.
+     *
+     * <p>A version that resolves but is not a semantic version -- a rich version such as
+     * {@code [1.5,2.0)} -- yields no floor in any mode, with a warning. The raw string is still
+     * what managed provisioning downloads, so failing here would reject a configuration that is
+     * otherwise workable; silently substituting the pinned default would be worse still, because
+     * the floor would then disagree with what is actually provisioned.
+     *
+     * @return the floor, or {@code null} when there is none and the version check must be skipped
      */
-    private static ElideVersion requiredRuntimeVersion(ElideExtension extension) {
+    private static ElideVersion requiredRuntimeVersion(ElideExtension extension, ElideRuntimeMode mode) {
         String configured;
         try {
             configured = extension.getRuntimeVersion().getOrNull();
         } catch (RuntimeException exception) {
-            LOGGER.info("Unable to resolve the configured Elide runtime version, so the PATH runtime "
+            // Gradle wraps the failure in its own property-query exception, so the resolver's
+            // GradleException is the cause rather than the thrown type. Anything else is an
+            // unrelated failure and must not be swallowed.
+            if (mode != ElideRuntimeMode.PATH || !causedByVersionResolution(exception)) {
+                throw exception;
+            }
+            LOGGER.warn("Unable to resolve the configured Elide runtime version, so the PATH runtime "
                     + "version check is skipped: {}", exception.getMessage());
             return null;
         }
-        return ElideVersion.parse(configured == null ? "" : configured)
-                .orElseGet(() -> ElideVersion.parse(ElideExtension.DEFAULT_RUNTIME_VERSION).orElseThrow());
+        if (configured == null || configured.isBlank()) {
+            return ElideVersion.parse(ElideExtension.DEFAULT_RUNTIME_VERSION).orElseThrow();
+        }
+        Optional<ElideVersion> parsed = ElideVersion.parseConfigured(configured);
+        if (parsed.isEmpty()) {
+            LOGGER.warn("Configured Elide runtime version '{}' is not a semantic version, so the PATH "
+                    + "runtime version check is skipped.", configured);
+            return null;
+        }
+        return parsed.get();
+    }
+
+    private static boolean causedByVersionResolution(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof GradleException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Reports a skipped PATH runtime once per build. Selection is re-evaluated on every read of the
+     * provider wrapping it, and that provider is read by several consumers, so logging from inside
+     * selection would repeat the same line many times over in a multi-project build.
+     */
+    private static Consumer<String> rejectionReporter(Provider<ElideBuildConfiguration> buildConfiguration) {
+        return message -> {
+            if (buildConfiguration.get().shouldReportOnce(message)) {
+                LOGGER.lifecycle(message);
+            }
+        };
     }
 
     /**

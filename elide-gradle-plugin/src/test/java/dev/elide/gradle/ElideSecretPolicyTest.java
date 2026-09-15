@@ -35,6 +35,18 @@ class ElideSecretPolicyTest {
             "DATABASE_URL|postgres://admin:s3cr3t@db.internal:5432/app",
             "ANYTHING|xoxb-0123456789-abcdefghijkl",
             "OPAQUE|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature",
+            // Words glued together inside one segment, which is how Gradle receives credentials
+            // from the environment. These have no PASSWORD or TOKEN segment to match.
+            "ORG_GRADLE_PROJECT_signingPassword|s3cr3t-passphrase",
+            "ORG_GRADLE_PROJECT_sonatypePassword|s3cr3t-passphrase",
+            "ORG_GRADLE_PROJECT_mavenCentralPassword|s3cr3t-passphrase",
+            "ORG_GRADLE_PROJECT_signingKeyId|0A1B2C3D",
+            "ORG_GRADLE_PROJECT_signingInMemoryKey|LS0tLS1CRUdJTiBQR1AgUFJJVkFURQ==",
+            "AWS_SECRETACCESSKEY|wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+            "GITHUB_ACCESSTOKEN|0123456789abcdef0123",
+            "myApiToken|0123456789abcdef0123",
+            "signingPassword|s3cr3t-passphrase",
+            "my_private_key|LS0tLS1CRUdJTiBQR1A=",
     })
     void redactsCredentialBearingValues(String name, String value) {
         assertTrue(ElideSecretPolicy.isSensitive(name, value),
@@ -67,9 +79,13 @@ class ElideSecretPolicyTest {
             // A URL without inline credentials is not a credential.
             "DATABASE_URL|postgres://db.internal:5432/app",
             "PROXY_URL|http://proxy.internal:3128",
-            // Below the length floor, where substitution is pure collateral damage.
+            // Below the length floor, where substitution is pure collateral damage. This applies to
+            // credential-shaped values too: some prefixes are only three or four bytes long, and
+            // redacting every occurrence of "eyJ" would shred ordinary output.
             "SECRET_FLAG|1",
             "AUTH_MODE|off",
+            "OPAQUE|eyJ",
+            "OPAQUE|sk-1",
     })
     void preservesOrdinaryValues(String name, String value) {
         assertFalse(ElideSecretPolicy.isSensitive(name, value),

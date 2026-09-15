@@ -26,6 +26,7 @@ class ElideRuntimeLocatorTest {
     private static final ElideVersion REQUIRED = ElideVersion.parse("1.5.1+20260903").orElseThrow();
     private static final String CURRENT = "1.5.1+20260903.4c6cdc7";
     private static final String OUTDATED = "1.4.9+20260101.0000000";
+    private static final java.util.function.Consumer<String> IGNORE_REJECTION = message -> { };
 
     @TempDir
     Path tempDir;
@@ -123,7 +124,7 @@ class ElideRuntimeLocatorTest {
 
         ElideRuntimeSelection selection = ElideRuntimeLocator.locate(
                 PATH, Optional.empty(), List.of(executable.getParent()), () -> managed, WINDOWS,
-                () -> REQUIRED, reporting(CURRENT));
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.PATH, selection.source());
         assertEquals(executable, selection.executable());
@@ -226,7 +227,7 @@ class ElideRuntimeLocatorTest {
                 () -> null,
                 candidate -> {
                     throw new AssertionError("No floor means no probe");
-                });
+                }, IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.PATH, selection.source());
         assertEquals(pathBin, selection.executable());
@@ -243,7 +244,7 @@ class ElideRuntimeLocatorTest {
                 () -> {
                     throw new AssertionError("The floor must not be resolved without a candidate");
                 },
-                reporting(CURRENT));
+                reporting(CURRENT), IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.MANAGED, selection.source());
     }
@@ -258,7 +259,7 @@ class ElideRuntimeLocatorTest {
                 () -> {
                     throw new AssertionError("MANAGED must not resolve a PATH floor");
                 },
-                reporting(CURRENT));
+                reporting(CURRENT), IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.MANAGED, selection.source());
     }
@@ -272,7 +273,8 @@ class ElideRuntimeLocatorTest {
                                          List<Path> pathDirectories, Path managed,
                                          ElideVersionProbe probe) {
         return ElideRuntimeLocator.locate(
-                mode, explicit, pathDirectories, () -> managed, LINUX, () -> REQUIRED, probe);
+                mode, explicit, pathDirectories, () -> managed, LINUX, () -> REQUIRED, probe,
+                IGNORE_REJECTION);
     }
 
     /** Every candidate reports the same version. */

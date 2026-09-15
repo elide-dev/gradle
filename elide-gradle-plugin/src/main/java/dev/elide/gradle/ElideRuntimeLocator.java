@@ -1,19 +1,15 @@
 package dev.elide.gradle;
 
-import org.gradle.api.logging.Logger;
-import org.gradle.api.logging.Logging;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /** Pure runtime selection logic, independent of Gradle and process execution. */
 public final class ElideRuntimeLocator {
-    private static final Logger LOGGER = Logging.getLogger(ElideRuntimeLocator.class);
-
     private ElideRuntimeLocator() {
     }
 
@@ -32,6 +28,10 @@ public final class ElideRuntimeLocator {
      *                          floor is unknown -- modes that never provision must not fail merely
      *                          because a managed version cannot be resolved -- and the first usable
      *                          candidate is then accepted without probing.
+     * @param onCandidateRejected reports an out-of-date candidate that {@code AUTO} skipped. This
+     *                          is a callback rather than a log call because selection is re-run on
+     *                          every read of the provider that wraps it, so the caller has to be
+     *                          the one that decides a given rejection is only worth saying once.
      */
     public static ElideRuntimeSelection locate(
             ElideRuntimeMode mode,
@@ -40,7 +40,8 @@ public final class ElideRuntimeLocator {
             Supplier<Path> managedExecutable,
             ElidePlatform platform,
             Supplier<ElideVersion> requiredVersion,
-            ElideVersionProbe versionProbe) {
+            ElideVersionProbe versionProbe,
+            Consumer<String> onCandidateRejected) {
         if (mode == ElideRuntimeMode.MANAGED) {
             return new ElideRuntimeSelection(ElideRuntimeSource.MANAGED, managedExecutable.get());
         }
@@ -79,9 +80,9 @@ public final class ElideRuntimeLocator {
             if (rejected != null) {
                 // Without this the only visible effect is an unexplained managed download, or an
                 // offline cache-miss failure, with nothing pointing at the installed runtime.
-                LOGGER.lifecycle("Elide runtime on PATH ({}) reports version {}, below the required {};"
-                                + " using the managed runtime instead.",
-                        rejected, describe(rejectedVersion), floor);
+                onCandidateRejected.accept("Elide runtime on PATH (" + rejected + ") reports version "
+                        + describe(rejectedVersion) + ", below the required " + floor
+                        + "; using the managed runtime instead.");
             }
             return new ElideRuntimeSelection(ElideRuntimeSource.MANAGED, managedExecutable.get());
         }

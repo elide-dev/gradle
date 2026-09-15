@@ -250,6 +250,52 @@ class SettingsPluginFunctionalTest {
     }
 
     @Test
+    void autoModeStillFailsOnAnUnresolvableCatalogVersionEvenWithAnExecutableOnPath() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The PATH fixture is a POSIX shell script.");
+        // The PATH-mode tolerance must not leak into AUTO, which does provision: silently compiling
+        // with whatever is first on PATH would disable the version check in the default mode.
+        Path projectDirectory = temporaryDirectory.resolve("auto-unresolvable-version");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Path executableDirectory = projectDirectory.resolve("bin");
+        Files.createDirectories(executableDirectory);
+        Path executable = executableDirectory.resolve("elide");
+        Files.writeString(executable, "#!/bin/sh\nexit 0\n");
+        executable.toFile().setExecutable(true);
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                other = "1.0"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins { id("dev.elide.settings") }
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.AUTO
+                        versionFrom("libs", "elide")
+                    }
+                }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide"); id("java") }
+                """);
+
+        Map<String, String> environment = new HashMap<>(System.getenv());
+        environment.put("PATH", executableDirectory.toString());
+        environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
+        BuildResult result = configuredRunner(projectDirectory)
+                .withEnvironment(environment)
+                .withArguments(":app:compileJava")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains(
+                "Elide version alias 'elide' does not exist in catalog 'libs'"), result.getOutput());
+    }
+
+    @Test
     void managedRuntimeReportsAbsentProviderVersion() throws IOException {
         assertAbsentManagedVersionFails("MANAGED");
     }

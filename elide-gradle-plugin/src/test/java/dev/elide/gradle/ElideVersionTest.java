@@ -62,6 +62,28 @@ class ElideVersionTest {
     }
 
     @Test
+    void readsAConfiguredVersionCarryingATagStylePrefix() {
+        // A configured version is written by a person, where v1.6.0 is an ordinary tag convention.
+        assertEquals(new ElideVersion(1, 6, 0), ElideVersion.parseConfigured("v1.6.0").orElseThrow());
+        assertEquals(new ElideVersion(1, 5, 1), ElideVersion.parseConfigured("1.5.1+20260903").orElseThrow());
+    }
+
+    @Test
+    void rejectsAConfiguredVersionThatIsNotSemantic() {
+        // A rich version has no single floor, and substituting the pinned default would silently
+        // disagree with the version that managed provisioning actually downloads.
+        assertEquals(Optional.empty(), ElideVersion.parseConfigured("[1.5,2.0)"));
+        assertEquals(Optional.empty(), ElideVersion.parseConfigured("latest.release"));
+        assertEquals(Optional.empty(), ElideVersion.parseConfigured(null));
+    }
+
+    @Test
+    void probeParsingStaysStrictWhereConfiguredParsingIsLenient() {
+        // The v-prefix leniency must not leak into probe output, which stays anchored.
+        assertEquals(Optional.empty(), ElideVersion.parse("v1.6.0"));
+    }
+
+    @Test
     void returnsEmptyForUnparseableOutput() {
         assertEquals(Optional.empty(), ElideVersion.parse("not a version"));
         assertEquals(Optional.empty(), ElideVersion.parse(""));

@@ -14,12 +14,20 @@ import java.util.regex.Pattern;
  * credential must never reach a build log, and a value that does not must never be substituted into
  * one, because redacting ordinary values destroys the diagnostic the log exists for.
  *
- * <p>Two independent triggers are used, either of which is sufficient.
+ * <p>Three independent triggers are used, any of which is sufficient. All name matching is
+ * case-insensitive, so a lower-case or camelCase name is treated exactly like a shouting one.
  *
  * <ol>
- *   <li><b>Name segments.</b> The name is split on {@code _}, {@code -} and {@code .}, and a
- *       segment must match exactly. Substring matching was the previous approach and it fired on
- *       {@code KEYBOARD} and {@code MONKEY}.
+ *   <li><b>Unambiguous words, matched anywhere in the name.</b> Words such as {@code password},
+ *       {@code secret}, {@code token} and {@code signing} do not occur innocently, so they are
+ *       matched as plain substrings. This is what catches names that glue words together inside a
+ *       single segment, which is how Gradle receives credentials from the environment:
+ *       {@code ORG_GRADLE_PROJECT_signingPassword}, {@code AWS_SECRETACCESSKEY},
+ *       {@code myApiToken}.
+ *   <li><b>Ambiguous words, matched as whole name segments.</b> Words such as {@code KEY} and
+ *       {@code AUTH} do occur innocently, so the name is split on {@code _}, {@code -} and
+ *       {@code .} and a segment must match exactly. This is what keeps {@code KEYBOARD} and
+ *       {@code MONKEY} out of it.
  *   <li><b>Value shape.</b> Some names carry credentials without saying so — {@code GH_PAT},
  *       {@code DATABASE_URL} — so a value that looks like a credential is redacted whatever it is
  *       called.
@@ -38,12 +46,23 @@ final class ElideSecretPolicy {
      */
     static final int MIN_VALUE_BYTES = 6;
 
-    /** Name segments that indicate the value is a credential. */
+    /**
+     * Words that never appear innocently in a variable name, matched anywhere within it. Segment
+     * matching alone misses the names credentials actually arrive under, because those concatenate
+     * words inside one segment: {@code ORG_GRADLE_PROJECT_signingPassword} has no {@code PASSWORD}
+     * segment, only a {@code SIGNINGPASSWORD} one.
+     */
+    private static final List<String> SENSITIVE_WORDS = List.of(
+            "PASSWORD", "PASSWD", "PASSPHRASE", "SECRET", "TOKEN", "SIGNING",
+            "CREDENTIAL", "APIKEY", "ACCESSKEY", "PRIVATEKEY", "AUTHORIZATION");
+
+    /**
+     * Words that can occur innocently, so they only count as a whole name segment. {@code KEY} is
+     * the motivating case: it must match {@code API_KEY} but not {@code KEYBOARD}.
+     */
     private static final Set<String> SENSITIVE_SEGMENTS = Set.of(
-            "TOKEN", "TOKENS", "SECRET", "SECRETS", "PASSWORD", "PASSWD", "PASSPHRASE",
-            "CREDENTIAL", "CREDENTIALS", "KEY", "KEYS", "APIKEY", "AUTH", "AUTHORIZATION",
-            "SESSION", "COOKIE", "SIGNATURE", "CERT", "PRIVATE", "SALT", "NONCE",
-            "PAT", "DSN", "SID", "BEARER");
+            "KEY", "KEYS", "AUTH", "SESSION", "COOKIE", "SIGNATURE", "CERT",
+            "PRIVATE", "SALT", "NONCE", "PAT", "DSN", "SID", "BEARER");
 
     /**
      * Names that match a sensitive segment but are known not to carry a credential. Kept short on
@@ -84,14 +103,20 @@ final class ElideSecretPolicy {
         if (name == null || value == null || value.isEmpty()) {
             return false;
         }
-        // Shape is checked first, so a credential is caught even under a name on the benign list.
-        if (looksLikeCredential(value)) {
-            return true;
-        }
+        // The floor comes first: substituting a two-byte value destroys far more output than it
+        // protects, and some credential prefixes are themselves only three or four bytes long.
         if (value.getBytes(StandardCharsets.UTF_8).length < MIN_VALUE_BYTES) {
             return false;
         }
+        // Shape is checked before the benign list, so a credential is caught even under a name
+        // that is otherwise known to be safe to print.
+        if (looksLikeCredential(value)) {
+            return true;
+        }
         String upperCaseName = name.toUpperCase(Locale.ROOT);
+        if (hasSensitiveWord(upperCaseName)) {
+            return true;
+        }
         if (BENIGN_NAMES.contains(upperCaseName)) {
             return false;
         }
@@ -105,6 +130,15 @@ final class ElideSecretPolicy {
             }
         }
         return CREDENTIALED_URL.matcher(value).find();
+    }
+
+    private static boolean hasSensitiveWord(String upperCaseName) {
+        for (String word : SENSITIVE_WORDS) {
+            if (upperCaseName.contains(word)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasSensitiveSegment(String upperCaseName) {
