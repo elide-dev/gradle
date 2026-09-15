@@ -176,9 +176,9 @@ value is redacted when either its name or its own shape says so:
   `postgres://user:password@host/db`. This covers conventions like `GH_PAT` and `DATABASE_URL` that say nothing in
   their name.
 
-Before any of that, a value that cannot hold a recoverable secret is excluded outright: a couple of bytes, a boolean
-such as `off` or `true`, or a small integer. Substituting one of those would replace that fragment everywhere it occurs
-and corrupt far more output than it could protect — redacting `1` blanks every digit in a compiler error. Length is not
-otherwise considered, so a short value under a name that says `KEY` is still redacted. Ordinary variables such as
+Before any of that, a value that cannot hold a recoverable secret is excluded outright: one shorter than three UTF-8
+bytes, or one that states a mode, such as `off` or `true`. Substituting either would replace that fragment everywhere it
+occurs and corrupt far more output than it could protect — redacting `1` blanks every digit in a compiler error. Nothing
+else is excluded by shape or length, so a short or purely numeric value under a name that says `KEY` is still redacted. Ordinary variables such as
 `PWD`, `USER`, `HOME` and `LANG` are left alone, so paths, identifiers and line numbers in a failing command's output
 stay readable. The plugin does not print the full environment when an Elide subprocess fails.

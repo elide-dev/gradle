@@ -7,6 +7,7 @@ import org.gradle.api.provider.ValueSourceParameters;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -61,9 +62,20 @@ public abstract class ElideVersionProbeSource
             return null;
         } finally {
             if (process != null) {
-                process.destroyForcibly();
+                terminate(process);
             }
         }
+    }
+
+    /**
+     * Kills the candidate and anything it started. Destroying only the candidate would leave its
+     * children running: the process tree is captured first, because once the parent dies its
+     * descendants are reparented and can no longer be found from it.
+     */
+    private static void terminate(Process process) {
+        List<ProcessHandle> descendants = process.descendants().toList();
+        process.destroyForcibly();
+        descendants.forEach(ProcessHandle::destroyForcibly);
     }
 
     private static String readBounded(InputStream input) {

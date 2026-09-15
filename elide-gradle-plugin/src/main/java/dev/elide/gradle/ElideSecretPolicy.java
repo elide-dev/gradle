@@ -105,9 +105,12 @@ final class ElideSecretPolicy {
     /**
      * A URL carrying inline credentials, such as a {@code DATABASE_URL} or a Sentry DSN. Matching
      * the shape covers those names without having to enumerate them.
+     *
+     * <p>Any user info before the {@code @} counts, not just a {@code user:password} pair: a
+     * single token is the common form for both a Sentry DSN and an authenticated Git remote.
      */
     private static final Pattern CREDENTIALED_URL =
-            Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.\\-]*://[^/\\s:@]+:[^/\\s@]+@");
+            Pattern.compile("^[a-zA-Z][a-zA-Z0-9+.\\-]*://[^/\\s@]+@");
 
     private ElideSecretPolicy() {
     }

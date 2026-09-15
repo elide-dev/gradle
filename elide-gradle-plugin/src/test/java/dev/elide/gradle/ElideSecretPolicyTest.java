@@ -34,6 +34,10 @@ class ElideSecretPolicyTest {
             "BUILD_INPUT|ghp_0123456789abcdefghijklmnopqrstuvwxyz",
             "DATABASE_URL|postgres://admin:s3cr3t@db.internal:5432/app",
             "ANYTHING|xoxb-0123456789-abcdefghijkl",
+            // User info without a password is still a credential: this is how a Sentry DSN
+            // and an authenticated Git remote both carry their token.
+            "ANYTHING|https://0123456789abcdef@o0.ingest.sentry.io/0",
+            "BUILD_REMOTE|https://ghp_0123456789abcdefghij@github.com/owner/repo.git",
             "OPAQUE|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature",
             // Words glued together inside one segment, which is how Gradle receives credentials
             // from the environment. These have no PASSWORD or TOKEN segment to match.

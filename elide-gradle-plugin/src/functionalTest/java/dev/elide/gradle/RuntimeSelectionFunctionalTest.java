@@ -172,9 +172,12 @@ class RuntimeSelectionFunctionalTest {
 
         // The candidate is unreadable rather than accepted, and the build ends instead of hanging.
         assertTrue(result.getOutput().contains("reports version an unreadable version"), result.getOutput());
-        // Guards the fixture as much as the timeout: if the candidate exited on its own the
-        // build would finish in well under this, and the timeout would never be exercised.
+        // The lower bound guards the fixture: if the candidate exited on its own, the build would
+        // finish well under this and the timeout would never be exercised. The upper bound guards
+        // the timeout: without it the fixture's own 120s sleep would end the build eventually and
+        // the test would pass with no bound in place at all.
         assertTrue(elapsedMillis >= 5_000L, "Probe returned in " + elapsedMillis + "ms, so it did not block");
+        assertTrue(elapsedMillis < 60_000L, "Probe took " + elapsedMillis + "ms, so it was not bounded");
     }
 
     private static void writeVersionReportingExecutable(Path directory, String version) throws IOException {
