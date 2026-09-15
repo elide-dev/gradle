@@ -3,6 +3,7 @@ package dev.elide.gradle;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 import org.gradle.api.GradleException;
 
@@ -46,7 +47,9 @@ final class ElideArchiveInspector {
                 inspectTar(archive);
             }
         } catch (IOException exception) {
-            throw new GradleException("Unable to validate extracted Elide runtime", exception);
+            // Distinct from a rejected entry: nothing has been extracted at this point, and this is
+            // what a truncated download or a proxy error page surfaces as.
+            throw new GradleException("Unable to read Elide archive " + archive, exception);
         }
     }
 
@@ -67,18 +70,35 @@ final class ElideArchiveInspector {
         }
     }
 
+    /**
+     * Checks both views of a ZIP. {@link ZipFile} reads the central directory, while Gradle's
+     * {@code zipTree} has historically streamed local file headers, and the two can disagree: an
+     * archive with benign central-directory names and hostile local-header names would otherwise
+     * pass inspection and still be extracted.
+     */
     private static void inspectZip(Path archive) throws IOException {
         try (ZipFile zip = new ZipFile(archive.toFile())) {
             Enumeration<ZipArchiveEntry> entries = zip.getEntries();
             while (entries.hasMoreElements()) {
-                ZipArchiveEntry entry = entries.nextElement();
-                if (isSymbolicLink(entry)) {
-                    throw new GradleException(
-                            "Refusing symbolic link in Elide runtime archive: " + entry.getName());
-                }
-                requireContainedName(entry.getName());
+                requireSafeZipEntry(entries.nextElement());
             }
         }
+        try (InputStream fileInput = Files.newInputStream(archive);
+             ZipArchiveInputStream localHeaders =
+                     new ZipArchiveInputStream(new BufferedInputStream(fileInput))) {
+            ZipArchiveEntry entry;
+            while ((entry = localHeaders.getNextZipEntry()) != null) {
+                requireSafeZipEntry(entry);
+            }
+        }
+    }
+
+    private static void requireSafeZipEntry(ZipArchiveEntry entry) {
+        if (isSymbolicLink(entry)) {
+            throw new GradleException(
+                    "Refusing symbolic link in Elide runtime archive: " + entry.getName());
+        }
+        requireContainedName(entry.getName());
     }
 
     /**

@@ -14,8 +14,11 @@ import java.util.regex.Pattern;
  * credential must never reach a build log, and a value that does not must never be substituted into
  * one, because redacting ordinary values destroys the diagnostic the log exists for.
  *
- * <p>Three independent triggers are used, any of which is sufficient. All name matching is
- * case-insensitive, so a lower-case or camelCase name is treated exactly like a shouting one.
+ * <p>A value is first judged on its own: one that cannot hold a recoverable secret -- a couple of
+ * bytes, a boolean, a small integer -- is never redacted, because substituting such a fragment
+ * replaces it everywhere it occurs and destroys the diagnostic. Otherwise three independent
+ * triggers are used, any of which is sufficient. All name matching is case-insensitive, so a
+ * lower-case or camelCase name is treated exactly like a shouting one.
  *
  * <ol>
  *   <li><b>Unambiguous words, matched anywhere in the name.</b> Words such as {@code password},
@@ -39,12 +42,27 @@ import java.util.regex.Pattern;
  */
 final class ElideSecretPolicy {
     /**
-     * Values shorter than this carry no secret but collide with ordinary diagnostic text: a
-     * one-character {@code LC_TIME=C} or a two-character {@code DISPLAY=:1} would otherwise be
-     * substituted throughout a compiler error. Measured in UTF-8 bytes so short multibyte secrets
-     * are still redacted.
+     * A value this short carries no recoverable secret, and substituting it would replace that
+     * fragment everywhere it occurs and destroy the diagnostic outright -- redacting {@code 1}
+     * blanks every digit in a compiler error. This is the one length rule worth having: above it,
+     * length says nothing about whether a value is a secret, and an earlier six-byte floor meant a
+     * five-character {@code API_KEY} was printed verbatim.
      */
-    static final int MIN_VALUE_BYTES = 6;
+    static final int MIN_VALUE_BYTES = 3;
+
+    /**
+     * A prefix match needs a payload behind the prefix to be evidence of anything. A value that is
+     * merely {@code eyJ} or {@code sk-} is not a token, and real ones are far longer than this.
+     */
+    private static final int MIN_PREFIXED_CREDENTIAL_CHARS = 12;
+
+    /** Values that state a mode rather than hold a secret, whatever the variable is called. */
+    private static final Set<String> NON_SECRET_VALUES = Set.of(
+            "TRUE", "FALSE", "YES", "NO", "ON", "OFF", "NONE", "NULL", "AUTO",
+            "ENABLED", "DISABLED", "DEFAULT", "ALWAYS", "NEVER");
+
+    /** Bare integers up to this length are counts, ports, timeouts and ids, not credentials. */
+    private static final int MAX_NUMERIC_NON_SECRET_CHARS = 4;
 
     /**
      * Words that never appear innocently in a variable name, matched anywhere within it. Segment
@@ -103,18 +121,18 @@ final class ElideSecretPolicy {
         if (name == null || value == null || value.isEmpty()) {
             return false;
         }
-        // The floor comes first: substituting a two-byte value destroys far more output than it
-        // protects, and some credential prefixes are themselves only three or four bytes long.
-        if (value.getBytes(StandardCharsets.UTF_8).length < MIN_VALUE_BYTES) {
+        // Judged on the value alone, before any name is considered: these cannot be secrets, and
+        // substituting them would corrupt far more output than it could ever protect.
+        if (cannotBeSecret(value)) {
             return false;
+        }
+        String upperCaseName = name.toUpperCase(Locale.ROOT);
+        if (hasSensitiveWord(upperCaseName)) {
+            return true;
         }
         // Shape is checked before the benign list, so a credential is caught even under a name
         // that is otherwise known to be safe to print.
         if (looksLikeCredential(value)) {
-            return true;
-        }
-        String upperCaseName = name.toUpperCase(Locale.ROOT);
-        if (hasSensitiveWord(upperCaseName)) {
             return true;
         }
         if (BENIGN_NAMES.contains(upperCaseName)) {
@@ -123,10 +141,22 @@ final class ElideSecretPolicy {
         return hasSensitiveSegment(upperCaseName);
     }
 
+    private static boolean cannotBeSecret(String value) {
+        if (value.getBytes(StandardCharsets.UTF_8).length < MIN_VALUE_BYTES) {
+            return true;
+        }
+        if (NON_SECRET_VALUES.contains(value.toUpperCase(Locale.ROOT))) {
+            return true;
+        }
+        return value.length() <= MAX_NUMERIC_NON_SECRET_CHARS && value.chars().allMatch(Character::isDigit);
+    }
+
     private static boolean looksLikeCredential(String value) {
-        for (String prefix : CREDENTIAL_PREFIXES) {
-            if (value.startsWith(prefix)) {
-                return true;
+        if (value.length() >= MIN_PREFIXED_CREDENTIAL_CHARS) {
+            for (String prefix : CREDENTIAL_PREFIXES) {
+                if (value.startsWith(prefix)) {
+                    return true;
+                }
             }
         }
         return CREDENTIALED_URL.matcher(value).find();

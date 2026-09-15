@@ -226,6 +226,18 @@ class ElideArchiveInspectorTest {
         zip.closeArchiveEntry();
     }
 
+    @Test
+    void reportsAnUnreadableArchiveDistinctlyFromARejectedEntry() throws IOException {
+        // A truncated download or a proxy error page is not a hostile archive, and saying the
+        // extracted runtime failed validation points at the wrong thing entirely.
+        Path archive = tempDir.resolve("truncated.tgz");
+        Files.write(archive, "not actually a gzip stream".getBytes(StandardCharsets.UTF_8));
+
+        GradleException failure = assertThrows(GradleException.class,
+                () -> ElideArchiveInspector.requireSafeArchive(archive, LINUX));
+        assertTrue(failure.getMessage().startsWith("Unable to read Elide archive"), failure.getMessage());
+    }
+
     private static TarArchiveEntry regularTarEntry(String name) {
         TarArchiveEntry entry = new TarArchiveEntry(name);
         entry.setSize(CONTENT.length);

@@ -30,11 +30,14 @@ final class ElideVersionResolver {
 
     private static String resolveCatalogVersion(Project project, String catalogName, String alias) {
         VersionCatalogsExtension catalogs = project.getExtensions().getByType(VersionCatalogsExtension.class);
-        VersionCatalog catalog = catalogs.find(catalogName).orElseThrow(() -> new GradleException(
-                "Elide version catalog '" + catalogName + "' does not exist for project " + project.getPath()));
-        return catalog.findVersion(alias).orElseThrow(() -> new GradleException(
-                        "Elide version alias '" + alias + "' does not exist in catalog '" + catalogName
-                                + "' for project " + project.getPath()))
+        VersionCatalog catalog = catalogs.find(catalogName).orElseThrow(
+                () -> new ElideVersionResolutionException(
+                        "Elide version catalog '" + catalogName + "' does not exist for project "
+                                + project.getPath()));
+        return catalog.findVersion(alias).orElseThrow(
+                        () -> new ElideVersionResolutionException(
+                                "Elide version alias '" + alias + "' does not exist in catalog '"
+                                        + catalogName + "' for project " + project.getPath()))
                 .getRequiredVersion();
     }
 }

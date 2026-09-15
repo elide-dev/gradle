@@ -180,7 +180,7 @@ directions, so it can enable a feature the build script left off as well as disa
 
 | Property | Overrides | Effect |
 | --- | --- | --- |
-| `elide.builder.javac.enable` | `elide { compiler = ... }` | `false` removes Elide from the compile path entirely and reverts to stock `javac`, with no other change to the build |
+| `elide.builder.javac.enable` | `elide { compiler = ... }` | `false` removes Elide from the compile path entirely and reverts to stock `javac`. Compilation then also stops depending on `elideInstall` and `prepareElideRuntime`, so a build that relies on `install = true` to populate its dependencies changes behaviour too |
 | `elide.builder.maven.install.enable` | the extension's `install && maven` decision | `true` forces the Maven installer on even when `install` is left at its default |
 
 Set them on the command line (`-Pelide.builder.javac.enable=false`) or in `gradle.properties`. Any value other than

@@ -10,7 +10,7 @@ import java.util.Optional;
  * starts a process, which must not happen merely because the plugin was applied.
  */
 @FunctionalInterface
-public interface ElideVersionProbe {
+interface ElideVersionProbe {
     /**
      * @return the executable's reported version text, or empty when it cannot be determined
      */

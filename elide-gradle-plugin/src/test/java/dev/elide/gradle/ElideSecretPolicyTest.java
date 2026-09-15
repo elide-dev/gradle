@@ -47,6 +47,15 @@ class ElideSecretPolicyTest {
             "myApiToken|0123456789abcdef0123",
             "signingPassword|s3cr3t-passphrase",
             "my_private_key|LS0tLS1CRUdJTiBQR1A=",
+            // A short password is still a password. The general length floor exists to stop
+            // anonymous short values colliding with output, not to excuse a declared credential.
+            "ORG_GRADLE_PROJECT_signingPassword|abcde",
+            "MY_TOKEN|abc",
+            // Length says nothing about whether a value is a secret: a short key under a name
+            // that says KEY is still a key. Only an underscore separated this from APIKEY,
+            // which was redacted while this was not.
+            "API_KEY|abc12",
+            "MY_SECRET|abc",
     })
     void redactsCredentialBearingValues(String name, String value) {
         assertTrue(ElideSecretPolicy.isSensitive(name, value),
@@ -79,11 +88,14 @@ class ElideSecretPolicyTest {
             // A URL without inline credentials is not a credential.
             "DATABASE_URL|postgres://db.internal:5432/app",
             "PROXY_URL|http://proxy.internal:3128",
-            // Below the length floor, where substitution is pure collateral damage. This applies to
-            // credential-shaped values too: some prefixes are only three or four bytes long, and
-            // redacting every occurrence of "eyJ" would shred ordinary output.
+            // Values that cannot hold a secret, whatever their variable is called. Substituting
+            // any of these would replace the fragment throughout unrelated output.
             "SECRET_FLAG|1",
             "AUTH_MODE|off",
+            "SIGNING_ENABLED|true",
+            "TOKEN_TIMEOUT|3600",
+            "MY_TOKEN|ab",
+            // A prefix with no payload behind it is not a token; real ones are far longer.
             "OPAQUE|eyJ",
             "OPAQUE|sk-1",
     })

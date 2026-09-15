@@ -44,7 +44,7 @@ public final class ElideRuntimeResolver {
                     pathDirectories(project),
                     () -> managedExecutable(project, managedVersion.get(), platform),
                     platform,
-                    () -> requiredRuntimeVersion(extension, mode),
+                    () -> requiredRuntimeVersion(extension, mode, buildConfiguration),
                     versionProbe,
                     rejectionReporter(buildConfiguration));
         });
@@ -84,19 +84,21 @@ public final class ElideRuntimeResolver {
      *
      * @return the floor, or {@code null} when there is none and the version check must be skipped
      */
-    private static ElideVersion requiredRuntimeVersion(ElideExtension extension, ElideRuntimeMode mode) {
+    private static ElideVersion requiredRuntimeVersion(
+            ElideExtension extension, ElideRuntimeMode mode,
+            Provider<ElideBuildConfiguration> buildConfiguration) {
         String configured;
         try {
             configured = extension.getRuntimeVersion().getOrNull();
         } catch (RuntimeException exception) {
             // Gradle wraps the failure in its own property-query exception, so the resolver's
-            // GradleException is the cause rather than the thrown type. Anything else is an
+            // own exception type is the cause rather than the thrown type. Anything else is an
             // unrelated failure and must not be swallowed.
             if (mode != ElideRuntimeMode.PATH || !causedByVersionResolution(exception)) {
                 throw exception;
             }
-            LOGGER.warn("Unable to resolve the configured Elide runtime version, so the PATH runtime "
-                    + "version check is skipped: {}", exception.getMessage());
+            warnOnce(buildConfiguration, "Unable to resolve the configured Elide runtime version, so "
+                    + "the PATH runtime version check is skipped: " + exception.getMessage());
             return null;
         }
         if (configured == null || configured.isBlank()) {
@@ -104,16 +106,27 @@ public final class ElideRuntimeResolver {
         }
         Optional<ElideVersion> parsed = ElideVersion.parseConfigured(configured);
         if (parsed.isEmpty()) {
-            LOGGER.warn("Configured Elide runtime version '{}' is not a semantic version, so the PATH "
-                    + "runtime version check is skipped.", configured);
+            warnOnce(buildConfiguration, "Configured Elide runtime version '" + configured
+                    + "' is not a semantic version, so the PATH runtime version check is skipped.");
             return null;
         }
         return parsed.get();
     }
 
+    /**
+     * Selection is re-evaluated on every read of the provider wrapping it, and several consumers
+     * read it per project, so an unguarded warning repeats itself many times over in a
+     * multi-project build.
+     */
+    private static void warnOnce(Provider<ElideBuildConfiguration> buildConfiguration, String message) {
+        if (buildConfiguration.get().shouldReportOnce(message)) {
+            LOGGER.warn(message);
+        }
+    }
+
     private static boolean causedByVersionResolution(Throwable failure) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof GradleException) {
+            if (cause instanceof ElideVersionResolutionException) {
                 return true;
             }
         }
@@ -189,8 +202,19 @@ public final class ElideRuntimeResolver {
             ElidePlatform platform,
             Provider<ElideRuntimeSource> source) {
         Provider<String> managedVersion = project.provider(() -> requireManagedVersion(extension));
-        Provider<java.io.File> runtimeDirectory = managedVersion.map(version ->
-                managedExecutable(project, version, platform).getParent().getParent().toFile());
+        // The location must resolve even when the configured version does not. Gradle calculates
+        // this output property for every build that has the task in its graph, before onlyIf can
+        // skip it, so deriving it straight from managedVersion made an unresolvable version fail a
+        // PATH build that never provisions anything -- the exact failure the floor tolerance in
+        // requiredRuntimeVersion exists to prevent.
+        Provider<java.io.File> runtimeDirectory = project.provider(() -> {
+            if (source.getOrNull() != ElideRuntimeSource.MANAGED) {
+                return project.getLayout().getBuildDirectory()
+                        .dir("elide/unprovisioned-runtime").get().getAsFile();
+            }
+            return managedExecutable(project, managedVersion.get(), platform)
+                    .getParent().getParent().toFile();
+        });
         return project.getTasks().register(
                 ElideTaskName.ELIDE_RUNTIME_PREPARE, PrepareElideRuntimeTask.class, task -> {
             task.setGroup("Elide");

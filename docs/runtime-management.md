@@ -157,6 +157,7 @@ preparation is actually requested.
 | `Elide archive does not contain <filename>` | Use a release with the expected `bin/elide` or `bin/elide.exe` layout; the archive is not a usable Elide distribution. |
 | `Unable to set executable permissions for <path>` | Use a filesystem that supports executable permissions or select a PATH/explicit runtime; do not mark an unverified archive usable. |
 | `Refusing Elide archive entry ...` or `Unable to validate extracted Elide runtime` | Treat the archive as unsafe or malformed and retry from the official release; do not reuse the partial cache. |
+| `Unable to read Elide archive <path>` | The download is truncated or is not the expected archive format, which usually means a proxy or mirror returned something else. Retry from the official release. |
 | `Elide PATH runtime ... reports version ..., but ... or newer is required` | The installed Elide predates the configured `runtime.version`. Upgrade it, lower `runtime.version`, set `runtime.executable` to bypass the check, or choose `MANAGED`. `AUTO` skips the candidate instead of failing. |
 | `Elide command failed: executable ..., working directory ..., exit code ...` | Check the selected executable, project directory, manifest, and bounded standard error/output; fix the Elide command or project inputs and rerun. |
 
@@ -172,7 +173,9 @@ value is redacted when either its name or its own shape says so:
   `postgres://user:password@host/db`. This covers conventions like `GH_PAT` and `DATABASE_URL` that say nothing in
   their name.
 
-Name-matched values must also be at least six bytes long, because substituting a one- or two-character value such as
-`DISPLAY=:1` corrupts far more output than it protects. Ordinary variables such as `PWD`, `USER`, `HOME` and `LANG` are
-left alone, so paths, identifiers and line numbers in a failing command's output stay readable. The plugin does not
-print the full environment when an Elide subprocess fails.
+Before any of that, a value that cannot hold a recoverable secret is excluded outright: a couple of bytes, a boolean
+such as `off` or `true`, or a small integer. Substituting one of those would replace that fragment everywhere it occurs
+and corrupt far more output than it could protect — redacting `1` blanks every digit in a compiler error. Length is not
+otherwise considered, so a short value under a name that says `KEY` is still redacted. Ordinary variables such as
+`PWD`, `USER`, `HOME` and `LANG` are left alone, so paths, identifiers and line numbers in a failing command's output
+stay readable. The plugin does not print the full environment when an Elide subprocess fails.

@@ -62,6 +62,16 @@ record ElideVersion(int major, int minor, int patch) implements Comparable<Elide
         if (normalized.startsWith("v") || normalized.startsWith("V")) {
             normalized = normalized.substring(1);
         }
+        Matcher matcher = SEMANTIC_VERSION.matcher(normalized);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        // A dynamic version such as 1.5.+ matches its leading 1.5 and would otherwise yield a floor
+        // of 1.5.0, well below whatever it actually resolves to. A complete version never continues
+        // with another dot: what follows can only be prerelease or +build metadata.
+        if (normalized.startsWith(".", matcher.end())) {
+            return Optional.empty();
+        }
         return parse(normalized);
     }
 

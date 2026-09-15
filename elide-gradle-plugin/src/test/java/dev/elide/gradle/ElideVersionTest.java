@@ -75,6 +75,9 @@ class ElideVersionTest {
         assertEquals(Optional.empty(), ElideVersion.parseConfigured("[1.5,2.0)"));
         assertEquals(Optional.empty(), ElideVersion.parseConfigured("latest.release"));
         assertEquals(Optional.empty(), ElideVersion.parseConfigured(null));
+        // Gradle dynamic versions: 1.5.+ must not quietly become a floor of 1.5.0.
+        assertEquals(Optional.empty(), ElideVersion.parseConfigured("1.5.+"));
+        assertEquals(Optional.empty(), ElideVersion.parseConfigured("1.+"));
     }
 
     @Test

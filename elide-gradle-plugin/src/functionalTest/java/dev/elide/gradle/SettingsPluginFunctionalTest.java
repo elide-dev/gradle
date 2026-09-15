@@ -241,9 +241,12 @@ class SettingsPluginFunctionalTest {
         Map<String, String> environment = new HashMap<>(System.getenv());
         environment.put("PATH", executableDirectory.toString());
         environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
+        // Deliberately not --dry-run: that never resolves task output properties, and
+        // prepareElideRuntime derives its output directory from the same unresolvable version.
+        // Asserting under --dry-run is what let this stay broken through two review rounds.
         BuildResult result = configuredRunner(projectDirectory)
                 .withEnvironment(environment)
-                .withArguments(":app:compileJava", "--dry-run")
+                .withArguments(":app:compileJava")
                 .build();
 
         assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
