@@ -55,6 +55,11 @@ class ElideSecretPolicyTest {
             // anonymous short values colliding with output, not to excuse a declared credential.
             "ORG_GRADLE_PROJECT_signingPassword|abcde",
             "MY_TOKEN|abc",
+            // A name that says outright it holds a credential outranks a value that merely
+            // looks like a mode: these are whatever the variable is actually holding.
+            "MY_PASSWORD|none",
+            "API_TOKEN|default",
+            "SIGNING_ENABLED|true",
             "API_KEY|1234",
             // Length says nothing about whether a value is a secret: a short key under a name
             // that says KEY is still a key. Only an underscore separated this from APIKEY,
@@ -93,12 +98,14 @@ class ElideSecretPolicyTest {
             // A URL without inline credentials is not a credential.
             "DATABASE_URL|postgres://db.internal:5432/app",
             "PROXY_URL|http://proxy.internal:3128",
-            // Values that cannot hold a secret, whatever their variable is called. Substituting
-            // any of these would replace the fragment throughout unrelated output.
+            // Too short to carry a secret, whatever the variable is called: substituting these
+            // would replace the fragment throughout unrelated output.
             "SECRET_FLAG|1",
-            "AUTH_MODE|off",
-            "SIGNING_ENABLED|true",
             "MY_TOKEN|ab",
+            // A mode rather than a held value, under a name that is only suggestive. A name that
+            // states a credential outright wins instead; see SIGNING_ENABLED above.
+            "AUTH_MODE|off",
+            "SESSION_STATE|disabled",
             // A prefix with no payload behind it is not a token; real ones are far longer.
             "OPAQUE|eyJ",
             "OPAQUE|sk-1",

@@ -96,6 +96,24 @@ class ElideArchiveInspectorTest {
     }
 
     @Test
+    void rejectsADriveRelativeEntryName() throws IOException {
+        // C:file has no slash, so it is not drive-absolute, but it still resolves against that
+        // drive's own current directory rather than the staging directory.
+        Path archive = tarArchive("drive-relative.tgz", tar -> {
+            TarArchiveEntry escape = new TarArchiveEntry("C:escaped.txt", true);
+            escape.setSize(CONTENT.length);
+            tar.putArchiveEntry(escape);
+            tar.write(CONTENT);
+            tar.closeArchiveEntry();
+        });
+
+        GradleException failure = assertThrows(GradleException.class,
+                () -> ElideArchiveInspector.requireSafeArchive(archive, LINUX));
+        assertTrue(failure.getMessage().contains("Refusing Elide archive entry outside runtime staging directory"),
+                failure.getMessage());
+    }
+
+    @Test
     void rejectsASymbolicLinkTarEntry() throws IOException {
         Path archive = tarArchive("symlink.tgz", tar -> {
             tar.putArchiveEntry(regularTarEntry("bin/elide"));

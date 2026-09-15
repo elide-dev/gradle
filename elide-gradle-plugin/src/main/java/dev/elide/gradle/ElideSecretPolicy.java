@@ -122,14 +122,22 @@ final class ElideSecretPolicy {
         if (name == null || value == null || value.isEmpty()) {
             return false;
         }
-        // Judged on the value alone, before any name is considered: these cannot be secrets, and
-        // substituting them would corrupt far more output than it could ever protect.
-        if (cannotBeSecret(value)) {
+        // Below this length a value cannot carry a recoverable secret, and substituting it would
+        // replace that fragment everywhere it occurs. That holds whatever the name says, so it is
+        // judged first: redacting the value of SECRET_FLAG=1 would blank every digit in the output.
+        if (isTooShortToCarryASecret(value)) {
             return false;
         }
         String upperCaseName = name.toUpperCase(Locale.ROOT);
+        // A name that states outright that it holds a credential settles the matter. A password of
+        // "none" is still whatever that variable is holding, so this precedes judging the value.
         if (hasSensitiveWord(upperCaseName)) {
             return true;
+        }
+        // Past that point the name is only suggestive, so a value that states a mode rather than
+        // holding anything is excluded; redacting it would corrupt output to no purpose.
+        if (statesAMode(value)) {
+            return false;
         }
         // Shape is checked before the benign list, so a credential is caught even under a name
         // that is otherwise known to be safe to print.
@@ -142,13 +150,16 @@ final class ElideSecretPolicy {
         return hasSensitiveSegment(upperCaseName);
     }
 
-    private static boolean cannotBeSecret(String value) {
-        if (value.getBytes(StandardCharsets.UTF_8).length < MIN_VALUE_BYTES) {
-            return true;
-        }
-        // Deliberately no exclusion for short numbers: a numeric value under a name that says KEY
-        // can be a real credential, and redacting a timeout or a port is a far smaller loss than
-        // printing one. Only values that state a mode are excluded.
+    private static boolean isTooShortToCarryASecret(String value) {
+        return value.getBytes(StandardCharsets.UTF_8).length < MIN_VALUE_BYTES;
+    }
+
+    /**
+     * Deliberately no exclusion for short numbers: a numeric value under a name that says KEY can
+     * be a real credential, and redacting a timeout or a port is a far smaller loss than printing
+     * one. Only values that state a mode are excluded.
+     */
+    private static boolean statesAMode(String value) {
         return NON_SECRET_VALUES.contains(value.toUpperCase(Locale.ROOT));
     }
 

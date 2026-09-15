@@ -122,7 +122,10 @@ final class ElideArchiveInspector {
      */
     private static void requireContainedName(String name) {
         String normalized = name.replace('\\', '/');
-        if (normalized.startsWith("/") || normalized.matches("^[A-Za-z]:/.*")) {
+        // Any leading drive designator, not only a drive-absolute one: a drive-relative name such
+        // as C:file resolves against that drive's own current directory, which is not the staging
+        // directory either.
+        if (normalized.startsWith("/") || normalized.matches("^[A-Za-z]:.*")) {
             throw new GradleException("Refusing Elide archive entry outside runtime staging directory");
         }
         for (String segment : normalized.split("/")) {
