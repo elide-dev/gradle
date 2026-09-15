@@ -164,8 +164,11 @@ preparation is actually requested.
 The plugin captures only bounded diagnostics and redacts inherited environment values that look like credentials. A
 value is redacted when either its name or its own shape says so:
 
-- a name *segment* matches a sensitive word (`TOKEN`, `SECRET`, `PASSWORD`, `KEY`, `AUTH`, `PAT`, `DSN` and similar),
-  with the name split on `_`, `-` and `.`. Matching whole segments rather than substrings is what keeps `KEYBOARD` and
+- the name contains a word that never occurs innocently (`PASSWORD`, `SECRET`, `TOKEN`, `SIGNING` and similar),
+  matched anywhere within it so that names which glue words together, such as
+  `ORG_GRADLE_PROJECT_signingPassword`, are caught;
+- or a whole name *segment* matches a word that can occur innocently (`KEY`, `AUTH`, `SESSION`, `PAT`, `DSN` and
+  similar), with the name split on `_`, `-` and `.`. Requiring a whole segment for these is what keeps `KEYBOARD` and
   `MONKEY` out of it, and a short list of known-benign names (`SSH_AUTH_SOCK`, `XDG_SESSION_TYPE`, `SESSION_MANAGER`
   and friends) is excluded outright;
 - or the value carries a recognizable credential regardless of its name — a known token prefix such as `ghp_`,

@@ -253,6 +253,57 @@ class SettingsPluginFunctionalTest {
     }
 
     @Test
+    void pathModeCompilesWithAnUnresolvableCatalogVersionWhenTheCompilerIsEnabled() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The PATH fixture is a POSIX shell script.");
+        // With the compiler enabled and real sources, compileJava registers the managed version as
+        // a task input. Snapshotting it resolved the missing alias and failed before compilation,
+        // which the other PATH fixture missed by having neither.
+        Path projectDirectory = temporaryDirectory.resolve("path-compiler-enabled");
+        Files.createDirectories(projectDirectory.resolve("app/src/main/java/example"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Path executableDirectory = projectDirectory.resolve("bin");
+        Files.createDirectories(executableDirectory);
+        Path executable = executableDirectory.resolve("elide");
+        Files.writeString(executable, "#!/bin/sh\nexit 0\n");
+        executable.toFile().setExecutable(true);
+        Files.writeString(projectDirectory.resolve("app/src/main/java/example/Fixture.java"), """
+                package example;
+                public final class Fixture { }
+                """);
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                other = "1.0"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins { id("dev.elide.settings") }
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.PATH
+                        versionFrom("libs", "elide")
+                    }
+                }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide"); id("java") }
+                elide { compiler = true }
+                """);
+
+        Map<String, String> environment = new HashMap<>(System.getenv());
+        environment.put("PATH", executableDirectory.toString());
+        environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
+        BuildResult result = configuredRunner(projectDirectory)
+                .withEnvironment(environment)
+                .withArguments(":app:compileJava")
+                .build();
+
+        assertTrue(result.getOutput().contains("BUILD SUCCESSFUL"), result.getOutput());
+    }
+
+    @Test
     void autoModeStillFailsOnAnUnresolvableCatalogVersionEvenWithAnExecutableOnPath() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The PATH fixture is a POSIX shell script.");

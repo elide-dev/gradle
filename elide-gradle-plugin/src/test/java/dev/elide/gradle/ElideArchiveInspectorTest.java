@@ -127,7 +127,7 @@ class ElideArchiveInspectorTest {
 
         GradleException failure = assertThrows(GradleException.class,
                 () -> ElideArchiveInspector.requireSafeArchive(archive, LINUX));
-        assertTrue(failure.getMessage().contains("Refusing symbolic link in Elide runtime archive"),
+        assertTrue(failure.getMessage().contains("Refusing hard link in Elide runtime archive"),
                 failure.getMessage());
     }
 

@@ -60,10 +60,15 @@ final class ElideArchiveInspector {
             TarArchiveEntry entry;
             while ((entry = tarInput.getNextTarEntry()) != null) {
                 // Hard links are rejected alongside symbolic links: both name a target outside the
-                // entry itself, and neither belongs in a runtime distribution.
-                if (entry.isSymbolicLink() || entry.isLink()) {
+                // entry itself, and neither belongs in a runtime distribution. They are reported
+                // separately so the diagnostic says what the archive actually contains.
+                if (entry.isSymbolicLink()) {
                     throw new GradleException(
                             "Refusing symbolic link in Elide runtime archive: " + entry.getName());
+                }
+                if (entry.isLink()) {
+                    throw new GradleException(
+                            "Refusing hard link in Elide runtime archive: " + entry.getName());
                 }
                 requireContainedName(entry.getName());
             }

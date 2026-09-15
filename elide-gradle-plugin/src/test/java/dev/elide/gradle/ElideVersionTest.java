@@ -87,6 +87,15 @@ class ElideVersionTest {
     }
 
     @Test
+    void rejectsTrailingTextAndPrereleaseSuffixes() {
+        // 1.5.1garbage is not a version, and 1.5.1-alpha precedes 1.5.1 in semantic versioning, so
+        // reading either as a bare 1.5.1 would let it satisfy a floor it does not meet.
+        assertEquals(Optional.empty(), ElideVersion.parse("1.5.1garbage"));
+        assertEquals(Optional.empty(), ElideVersion.parse("1.5.1-alpha"));
+        assertEquals(Optional.empty(), ElideVersion.parseConfigured("1.5.1-rc1"));
+    }
+
+    @Test
     void returnsEmptyForUnparseableOutput() {
         assertEquals(Optional.empty(), ElideVersion.parse("not a version"));
         assertEquals(Optional.empty(), ElideVersion.parse(""));

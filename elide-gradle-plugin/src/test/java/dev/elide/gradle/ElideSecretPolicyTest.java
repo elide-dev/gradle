@@ -51,6 +51,7 @@ class ElideSecretPolicyTest {
             // anonymous short values colliding with output, not to excuse a declared credential.
             "ORG_GRADLE_PROJECT_signingPassword|abcde",
             "MY_TOKEN|abc",
+            "API_KEY|1234",
             // Length says nothing about whether a value is a secret: a short key under a name
             // that says KEY is still a key. Only an underscore separated this from APIKEY,
             // which was redacted while this was not.
@@ -93,7 +94,6 @@ class ElideSecretPolicyTest {
             "SECRET_FLAG|1",
             "AUTH_MODE|off",
             "SIGNING_ENABLED|true",
-            "TOKEN_TIMEOUT|3600",
             "MY_TOKEN|ab",
             // A prefix with no payload behind it is not a token; real ones are far longer.
             "OPAQUE|eyJ",

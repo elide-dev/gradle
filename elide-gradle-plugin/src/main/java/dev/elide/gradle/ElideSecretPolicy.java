@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * one, because redacting ordinary values destroys the diagnostic the log exists for.
  *
  * <p>A value is first judged on its own: one that cannot hold a recoverable secret -- a couple of
- * bytes, a boolean, a small integer -- is never redacted, because substituting such a fragment
+ * bytes or a boolean -- is never redacted, because substituting such a fragment
  * replaces it everywhere it occurs and destroys the diagnostic. Otherwise three independent
  * triggers are used, any of which is sufficient. All name matching is case-insensitive, so a
  * lower-case or camelCase name is treated exactly like a shouting one.
@@ -61,8 +61,6 @@ final class ElideSecretPolicy {
             "TRUE", "FALSE", "YES", "NO", "ON", "OFF", "NONE", "NULL", "AUTO",
             "ENABLED", "DISABLED", "DEFAULT", "ALWAYS", "NEVER");
 
-    /** Bare integers up to this length are counts, ports, timeouts and ids, not credentials. */
-    private static final int MAX_NUMERIC_NON_SECRET_CHARS = 4;
 
     /**
      * Words that never appear innocently in a variable name, matched anywhere within it. Segment
@@ -145,10 +143,10 @@ final class ElideSecretPolicy {
         if (value.getBytes(StandardCharsets.UTF_8).length < MIN_VALUE_BYTES) {
             return true;
         }
-        if (NON_SECRET_VALUES.contains(value.toUpperCase(Locale.ROOT))) {
-            return true;
-        }
-        return value.length() <= MAX_NUMERIC_NON_SECRET_CHARS && value.chars().allMatch(Character::isDigit);
+        // Deliberately no exclusion for short numbers: a numeric value under a name that says KEY
+        // can be a real credential, and redacting a timeout or a port is a far smaller loss than
+        // printing one. Only values that state a mode are excluded.
+        return NON_SECRET_VALUES.contains(value.toUpperCase(Locale.ROOT));
     }
 
     private static boolean looksLikeCredential(String value) {

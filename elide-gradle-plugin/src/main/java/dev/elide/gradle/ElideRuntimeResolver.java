@@ -148,24 +148,15 @@ public final class ElideRuntimeResolver {
      * through the shared build service so the whole build probes each candidate at most once rather
      * than once per project.
      *
-     * <p>Output is only trusted when the process exits {@code 0}; a foreign binary that rejects
-     * {@code --version} and prints a usage banner must not have a number from that banner read as
-     * its version.
+     * <p>The probe itself is bounded in time and output; see {@link ElideVersionProbeSource}.
      */
     private static ElideVersionProbe versionProbe(
             Project project, Provider<ElideBuildConfiguration> buildConfiguration) {
         return executable -> buildConfiguration.get().probedRuntimeVersion(executable, candidate -> {
             try {
-                var output = project.getProviders().exec(spec -> {
-                    spec.setExecutable(candidate.toFile());
-                    spec.args("--version");
-                    spec.setIgnoreExitValue(true);
-                });
-                if (output.getResult().get().getExitValue() != 0) {
-                    return Optional.empty();
-                }
-                return Optional.ofNullable(output.getStandardOutput().getAsText().getOrNull())
-                        .filter(text -> !text.isBlank());
+                return Optional.ofNullable(project.getProviders().of(ElideVersionProbeSource.class, spec ->
+                                spec.getParameters().getExecutablePath().set(candidate.toString()))
+                        .getOrNull());
             } catch (RuntimeException exception) {
                 // An unreadable candidate is simply not usable; selection continues past it.
                 return Optional.empty();

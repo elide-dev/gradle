@@ -68,7 +68,11 @@ public class ElideGradlePlugin implements Plugin<Project> {
         arguments.getElideExecutable().set(resolution.executable());
         ElideTaskInputs.runtime(task, resolution);
         task.getInputs().property("elide.launcherJavaVersion", System.getProperty("java.runtime.version"));
-        task.getInputs().property("elide.runtimeVersion", extension.getRuntimeVersion());
+        // Only the managed runtime is identified by this version; a PATH or explicit runtime is
+        // keyed by the executable itself. Querying it unconditionally also made a version that
+        // cannot be resolved fail compilation in modes that never provision it.
+        task.getInputs().property("elide.runtimeVersion", resolution.source().map(selected ->
+                selected == ElideRuntimeSource.MANAGED ? extension.getRuntimeVersion().get() : ""));
         for (String name : List.of("CLASSPATH", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS")) {
             task.getInputs().property("elide.environment." + name,
                     task.getProject().getProviders().environmentVariable(name).orElse(""));

@@ -30,8 +30,9 @@ record ElideVersion(int major, int minor, int patch) implements Comparable<Elide
         if (reported == null || reported.isBlank()) {
             return Optional.empty();
         }
-        Matcher matcher = SEMANTIC_VERSION.matcher(reported.strip());
-        if (!matcher.find()) {
+        String normalized = reported.strip();
+        Matcher matcher = SEMANTIC_VERSION.matcher(normalized);
+        if (!matcher.find() || !endsVersion(normalized, matcher.end())) {
             return Optional.empty();
         }
         try {
@@ -42,6 +43,20 @@ record ElideVersion(int major, int minor, int patch) implements Comparable<Elide
         } catch (NumberFormatException exception) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * A version must end where its numbers do. Only build metadata or separating whitespace may
+     * follow, so trailing text such as {@code 1.5.1garbage} is rejected rather than read as
+     * {@code 1.5.1}, and a prerelease such as {@code 1.5.1-alpha} is not silently treated as equal
+     * to the release it precedes.
+     */
+    private static boolean endsVersion(String value, int end) {
+        if (end == value.length()) {
+            return true;
+        }
+        char next = value.charAt(end);
+        return next == '+' || Character.isWhitespace(next);
     }
 
     /**

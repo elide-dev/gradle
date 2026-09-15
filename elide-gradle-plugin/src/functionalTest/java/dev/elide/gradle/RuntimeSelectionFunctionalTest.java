@@ -138,6 +138,45 @@ class RuntimeSelectionFunctionalTest {
         assertFalse(result.getOutput().contains("is not cached at"), result.getOutput());
     }
 
+    @Test
+    void aPathRuntimeThatHangsOnVersionDoesNotBlockConfiguration() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The hanging fixture is a POSIX shell script.");
+        // Selection runs while the task graph is computed, against a binary the plugin does not
+        // control. Without a bound, one that waits on stdin would hang the build forever.
+        Path projectDirectory = temporaryDirectory.resolve("hanging-path-runtime");
+        Path executableDirectory = projectDirectory.resolve("bin");
+        Files.createDirectories(executableDirectory);
+        Path executable = executableDirectory.resolve("elide");
+        // Sleeps rather than reading stdin, so this exercises the timeout itself and not merely
+        // the probe closing the child's input.
+        // /bin/sleep by absolute path: this fixture runs with PATH reduced to its own directory,
+        // so a bare "sleep" would not be found and the script would exit immediately.
+        Files.writeString(executable,
+                "#!/bin/sh\nif [ \"${1-}\" = '--version' ]; then /bin/sleep 120; fi\nexit 0\n");
+        executable.toFile().setExecutable(true);
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                    id 'java'
+                }
+                elide { runtime { mode = dev.elide.gradle.ElideRuntimeMode.PATH } }
+                """);
+
+        long startedAt = System.nanoTime();
+        BuildResult result = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
+                .withArguments("compileJava")
+                .buildAndFail();
+        long elapsedMillis = (System.nanoTime() - startedAt) / 1_000_000L;
+
+        // The candidate is unreadable rather than accepted, and the build ends instead of hanging.
+        assertTrue(result.getOutput().contains("reports version an unreadable version"), result.getOutput());
+        // Guards the fixture as much as the timeout: if the candidate exited on its own the
+        // build would finish in well under this, and the timeout would never be exercised.
+        assertTrue(elapsedMillis >= 5_000L, "Probe returned in " + elapsedMillis + "ms, so it did not block");
+    }
+
     private static void writeVersionReportingExecutable(Path directory, String version) throws IOException {
         Files.createDirectories(directory);
         Path executable = directory.resolve("elide");

@@ -47,8 +47,9 @@ unversioned `dev.elide` project plugin available to participating projects.
 To keep the runtime version in a consumer catalog, declare an `elide` entry under `[versions]` and replace the direct
 version with `versionFrom("libs", "elide")`. The settings plugin's own version stays written literally in
 `settings.gradle.kts`: Gradle does not expose catalog accessors inside a settings `plugins {}` block. The published
-`elide-gradle-catalog` carries `elide` and `elideSettings` plugin aliases for use from `pluginManagement` and ordinary
-build scripts.
+`elide-gradle-catalog` carries `elide` and `elideSettings` plugin aliases for use from ordinary build scripts and
+convention plugins. They cannot apply the settings plugin itself: a catalog is not available while a settings script's
+`pluginManagement` and `plugins` blocks are evaluated, which is why that version stays literal.
 
 Applying the plugin only registers Gradle configuration and task wiring. It does not download or execute Elide, and it
 does not create or modify any file in `JAVA_HOME`. Managed preparation runs only when `prepareElideRuntime` is invoked
