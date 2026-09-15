@@ -105,6 +105,156 @@ class ManagedRuntimeFunctionalTest {
     }
 
     @Test
+    void rejectsAnArchiveContainingASymbolicLinkWithoutCompletingTheCacheEntry() throws Exception {
+        FixturePlatform platform = currentPlatform();
+        Path projectDirectory = temporaryDirectory.resolve("symlink-archive-project");
+        Path gradleUserHome = temporaryDirectory.resolve("symlink-archive-gradle-user-home");
+        byte[] archive = hostileSymlinkArchive(platform);
+        try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
+            writeProject(projectDirectory, gradleUserHome, platform, temporaryDirectory.resolve("unused.log"));
+
+            BuildResult result = runner(projectDirectory, gradleUserHome)
+                    .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                            "verifyManagedRuntime", releaseBaseUriArgument(server))
+                    .buildAndFail();
+
+            assertTrue(result.getOutput().contains("Refusing symbolic link in Elide runtime archive"),
+                    result.getOutput());
+            Path runtime = runtimeDirectory(gradleUserHome, platform);
+            assertFalse(Files.exists(runtime.resolve(".complete")));
+            assertFalse(Files.exists(runtime.resolve("lib").resolve("evil-link")));
+            assertEquals(List.of(), stagingDirectories(runtime));
+        }
+    }
+
+    @Test
+    void rejectsAnArchiveThatTraversesOutOfTheStagingDirectory() throws Exception {
+        FixturePlatform platform = currentPlatform();
+        Path projectDirectory = temporaryDirectory.resolve("traversal-archive-project");
+        Path gradleUserHome = temporaryDirectory.resolve("traversal-archive-gradle-user-home");
+        byte[] archive = hostileTraversalArchive(platform);
+        try (FixtureServer server = FixtureServer.start(VERSION, platform.assetName(), archive, sha256(archive))) {
+            writeProject(projectDirectory, gradleUserHome, platform, temporaryDirectory.resolve("unused.log"));
+
+            BuildResult result = runner(projectDirectory, gradleUserHome)
+                    .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                            "verifyManagedRuntime", releaseBaseUriArgument(server))
+                    .buildAndFail();
+
+            assertTrue(result.getOutput().contains("Refusing Elide archive entry outside runtime staging directory"),
+                    result.getOutput());
+            Path runtime = runtimeDirectory(gradleUserHome, platform);
+            assertFalse(Files.exists(runtime.resolve(".complete")));
+            assertEquals(List.of(), stagingDirectories(runtime));
+        }
+    }
+
+    /** Staging directories left behind by a failed preparation; a safe failure leaves none. */
+    private static List<String> stagingDirectories(Path runtime) throws IOException {
+        Path versionDirectory = runtime.getParent();
+        if (!Files.isDirectory(versionDirectory)) {
+            return List.of();
+        }
+        try (var entries = Files.list(versionDirectory)) {
+            return entries.map(path -> path.getFileName().toString())
+                    .filter(name -> name.contains(".tmp-"))
+                    .sorted()
+                    .toList();
+        }
+    }
+
+    private static byte[] hostileSymlinkArchive(FixturePlatform platform) throws IOException {
+        if (platform.archiveExtension().equals("zip")) {
+            return zipArchiveOf(zip -> {
+                writeZipFile(zip, "bin/" + platform.executableName(), "fixture executable");
+                org.apache.commons.compress.archivers.zip.ZipArchiveEntry link =
+                        new org.apache.commons.compress.archivers.zip.ZipArchiveEntry("lib/evil-link");
+                link.setUnixMode(0120777);
+                zip.putArchiveEntry(link);
+                zip.write("C:/Windows/System32/drivers/etc/hosts".getBytes(StandardCharsets.UTF_8));
+                zip.closeArchiveEntry();
+            });
+        }
+        return tarGzipArchive(tar -> {
+            writeTarFile(tar, "bin/" + platform.executableName(), "#!/bin/sh\nexit 0\n");
+            org.apache.commons.compress.archivers.tar.TarArchiveEntry link =
+                    new org.apache.commons.compress.archivers.tar.TarArchiveEntry(
+                            "lib/evil-link",
+                            org.apache.commons.compress.archivers.tar.TarArchiveEntry.LF_SYMLINK);
+            link.setLinkName("/etc/passwd");
+            tar.putArchiveEntry(link);
+            tar.closeArchiveEntry();
+        });
+    }
+
+    private static byte[] hostileTraversalArchive(FixturePlatform platform) throws IOException {
+        if (platform.archiveExtension().equals("zip")) {
+            return zipArchiveOf(zip -> {
+                writeZipFile(zip, "bin/" + platform.executableName(), "fixture executable");
+                writeZipFile(zip, "../escaped-outside-staging.txt", "escaped");
+            });
+        }
+        return tarGzipArchive(tar -> {
+            writeTarFile(tar, "bin/" + platform.executableName(), "#!/bin/sh\nexit 0\n");
+            writeTarFile(tar, "../escaped-outside-staging.txt", "escaped\n");
+        });
+    }
+
+    private static void writeZipFile(
+            org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zip,
+            String name,
+            String content) throws IOException {
+        zip.putArchiveEntry(new org.apache.commons.compress.archivers.zip.ZipArchiveEntry(name));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeArchiveEntry();
+    }
+
+    private static byte[] zipArchiveOf(ZipContent content) throws IOException {
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zip =
+                     new org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream(bytes)) {
+            content.write(zip);
+            zip.finish();
+        }
+        return bytes.toByteArray();
+    }
+
+    @FunctionalInterface
+    private interface ZipContent {
+        void write(org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream zip) throws IOException;
+    }
+
+    private static void writeTarFile(
+            org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tar,
+            String name,
+            String content) throws IOException {
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
+        org.apache.commons.compress.archivers.tar.TarArchiveEntry entry =
+                new org.apache.commons.compress.archivers.tar.TarArchiveEntry(name);
+        entry.setSize(bytes.length);
+        entry.setMode(0755);
+        tar.putArchiveEntry(entry);
+        tar.write(bytes);
+        tar.closeArchiveEntry();
+    }
+
+    private static byte[] tarGzipArchive(TarContent content) throws IOException {
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.GZIPOutputStream gzip = new java.util.zip.GZIPOutputStream(bytes);
+             org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tar =
+                     new org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(gzip)) {
+            content.write(tar);
+            tar.finish();
+        }
+        return bytes.toByteArray();
+    }
+
+    @FunctionalInterface
+    private interface TarContent {
+        void write(org.apache.commons.compress.archivers.tar.TarArchiveOutputStream tar) throws IOException;
+    }
+
+    @Test
     void offlineModeUsesACompletedCacheEntryWithoutSendingARequest() throws Exception {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("offline-hit-project");

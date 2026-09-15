@@ -10,6 +10,12 @@ release is cut.
 
 ### Added
 
+- Added a version check for `PATH`-selected runtimes. A candidate must report at least the configured `runtime.version`,
+  compared on the semantic version only. Under `AUTO` an out-of-date installed Elide is now skipped and the managed
+  runtime is provisioned instead of compiling with it; under `PATH` the build fails and names both versions. An explicit
+  `runtime.executable` is never probed.
+- Documented the `elide.builder.javac.enable` and `elide.builder.maven.install.enable` Gradle properties, which override
+  the extension in both directions, and added functional coverage for them.
 - Added relocatable Java compilation cache entries while preserving Gradle's incremental analysis and source removal.
 - Added opt-in build-scoped Elide compiler workers using the Bazel protobuf protocol and digest-keyed classpath reuse.
 - Added cacheable staged Java/Kotlin formatting, non-mutating `elideCheckFormat`, and explicit `elideFormat` application.
@@ -38,13 +44,21 @@ release is cut.
 - Added Linux, macOS, and Windows CI coverage, including a real Elide integration test on pull requests, pushes,
   schedules, and manual runs. The test provisions managed Elide, installs a real dependency, compiles Java with Elide,
   and runs the resulting application through Gradle.
-- Added dependency update automation, workflow concurrency controls, immutable action pins, and restricted network
-  egress.
+- Added dependency update automation, workflow concurrency controls, and immutable action pins. Scheduled runtime smoke
+  lanes additionally restrict network egress to an explicit allow-list; pull-request and push lanes run the runner
+  hardening in audit mode, which records outbound traffic without blocking it.
 - Added [runtime management](docs/runtime-management.md) and [compatibility and migration](docs/compatibility.md)
   documentation.
 
 ### Changed
 
+- Unified runtime selection on `ElideRuntimeLocator.locate`, which the resolver previously bypassed in favor of a
+  duplicated inline copy of the same precedence rules. The documented precedence table is now tested against the code
+  the plugin actually runs.
+- Declared configuration-cache support in both published plugin descriptors, which previously reported `UNDECLARED`.
+- Read `elide.builder.javac.enable` through a Gradle provider rather than eager, configuration-cache-untracked
+  `findProperty`.
+- Pinned the example project wrappers to supported Gradle versions with distribution checksum verification.
 - Replaced remote-script installation with the conventional settings plugin and concise `install`, `compiler`, `maven`,
   and nested `runtime` project configuration.
 - Upgraded the repository wrapper to Gradle 9.7.1 with distribution checksum verification. This changes the build used
@@ -69,6 +83,9 @@ release is cut.
 
 ### Fixed
 
+- Fixed failure diagnostics being destroyed by over-broad redaction. Every inherited environment value was previously
+  substituted, so ordinary short values such as `DISPLAY=:1` or `LC_TIME=C` mangled line numbers and identifiers in a
+  failing command's output. Only values of secret-bearing variable names, at least six bytes long, are redacted now.
 - Fixed configuration-time Elide execution and downloads, which previously made basic commands such as `clean` depend
   on a locally installed or downloadable Elide runtime.
 - Fixed the obsolete `1.0.0-beta5` runtime download URL that returned HTTP 404.
@@ -88,7 +105,9 @@ release is cut.
 
 ### Removed
 
-- Removed the remotely applied `elide.gradle.kts` bootstrap script.
+- Removed the remotely applied `elide.gradle.kts` bootstrap script. The `gradle.elide.dev` worker that served it now
+  returns HTTP 410 with a notice pointing at the settings plugin; it previously still served the superseded script for
+  pinned versions.
 - Removed the `elide-javac` shim and its CI setup script.
 - Removed the requirement to preinstall Elide for managed-mode builds.
 - Removed normal obsolete tests that depended on the developer's real `PATH`, a pre-created Java-home shim, or live
@@ -99,9 +118,13 @@ release is cut.
 ### Security
 
 - Managed archives are authenticated with their published SHA-256 digest before extraction.
-- Archive extraction rejects entries that escape the staging directory and refuses symbolic links.
+- Archive entry metadata is inspected before extraction, and entries naming an absolute path or a `..` segment, as well 
+  as symbolic and hard links, are refused. The previous checks ran against the already-extracted tree, where Gradle had 
+  already rejected a traversing archive with a generic "might be corrupted" message and had flattened symbolic links 
+  into empty regular files, so neither documented guard could fire.
 - Cache publication is serialized and staged so concurrent or failed builds cannot publish a partial runtime as valid.
-- Failure diagnostics redact inherited environment values without printing the environment and use fixed memory bounds.
+- Failure diagnostics redact inherited environment values whose variable names look like secrets, without printing the
+  environment and using fixed memory bounds.
 - CI actions are pinned to immutable commits and scheduled runtime smoke jobs use blocking, explicitly allow-listed
   egress.
 

@@ -45,7 +45,10 @@ The settings and project plugins ship in the same implementation artifact, so th
 unversioned `dev.elide` project plugin available to participating projects.
 
 To keep the runtime version in a consumer catalog, declare an `elide` entry under `[versions]` and replace the direct
-version with `versionFrom("libs", "elide")`.
+version with `versionFrom("libs", "elide")`. The settings plugin's own version stays written literally in
+`settings.gradle.kts`: Gradle does not expose catalog accessors inside a settings `plugins {}` block. The published
+`elide-gradle-catalog` carries `elide` and `elideSettings` plugin aliases for use from `pluginManagement` and ordinary
+build scripts.
 
 Applying the plugin only registers Gradle configuration and task wiring. It does not download or execute Elide, and it
 does not create or modify any file in `JAVA_HOME`. Managed preparation runs only when `prepareElideRuntime` is invoked
@@ -56,9 +59,18 @@ directly or when a consuming task depends on it. Java compilation launches the s
 
 The default `AUTO` mode checks these sources in order:
 
-1. An explicit `elideBin` executable, when it is a usable file.
-2. A compatible Elide executable on `PATH`.
+1. An explicit `runtime.executable`, when it is a usable file.
+2. A compatible Elide executable on `PATH`, meaning one that reports at least the configured
+   `runtime.version`.
 3. The managed runtime in Gradle User Home, using the configured `runtimeVersion`.
+
+Compatibility of a `PATH` candidate is established by running it with `--version` and comparing the semantic version,
+ignoring build metadata. Under `AUTO`, a candidate older than the configured version is not usable, so selection
+continues to the managed runtime rather than compiling with an unexpected toolchain; under `PATH` the build fails and
+names both versions. An explicitly configured `runtime.executable` is taken as given and is never probed.
+
+The probe runs when a task first needs the runtime, which for a compiling build is while the task graph is being
+computed. Applying the plugin still executes nothing, and configuration-only invocations such as `help` never probe.
 
 Use `PATH` to forbid managed runtime archive/checksum downloads and require an installed runtime. Other opt-in tasks such
 as `elide install` may still resolve project dependencies. Use `MANAGED` to require the exact configured version and never
@@ -114,7 +126,8 @@ dependencyLocking { lockAllConfigurations() }
 
 This mode rejects `install = true` and the legacy Maven installer override. Gradle resolves and verifies the compiler's
 classpath using its normal repositories, version catalogs, conflict resolution, lockfiles, and offline policy.
-`elideExportDependencies` writes a sorted inventory for every Java source set under `build/elide/dependencies/`, with
+`elideExportDependencies` is registered in every dependency mode, not only this one. It writes a sorted inventory for
+every Java source set under `build/elide/dependencies/`, with
 selected runtime-classpath coordinates, artifact filenames, and SHA-256 checksums. The reports are cacheable and contain no machine paths.
 They describe Gradle's selected artifacts; they do not import `elide.pkl`, read or rewrite `elide.lock.bin`, or create a
 second dependency lock. Existing Elide-manifest-driven installation remains available in the legacy mode below.
@@ -145,6 +158,11 @@ the launcher, runtime version, platform, managed-distribution checksum, and JVM/
 Gradle still controls incremental recompilation and stale class removal. Local and remote caches use the same task keys;
 configure your remote cache using normal Gradle settings.
 
+The Gradle daemon's `java.runtime.version` is also used as a cache key, recorded at configuration time. This is a full 
+build string such as `17.0.16+8`, not a feature version, so cache entries are keyed to an exact JDK build. Users on 
+different JDK patch releases will miss each other's entries; pin the daemon JDK across a fleet to share compilation 
+results.
+
 Set `persistentCompiler.set(true)` to use Elide's existing Bazel worker protocol. A build service keeps up to four native
 compiler processes warm, reusing compatible executable/working-directory pairs. Main and test compilation can share a
 process, while independent requests can use separate workers. Requests include content digests for classpath JARs so
@@ -154,6 +172,24 @@ Workers close at the end of the build; this is not a daemon shared between Gradl
 timeout. Native worker mode does not support `forkOptions.jvmArgs`; leave persistence disabled for those configurations.
 The one-shot compiler remains the default. Explicit/PATH installations must keep accompanying toolchain resources stable;
 declare any additional compiler-affecting files or environment variables as task inputs when using a custom installation.
+
+### Gradle property overrides
+
+Two Gradle properties override the extension for the whole project. Each one *replaces* the configured value in both
+directions, so it can enable a feature the build script left off as well as disable one it turned on:
+
+| Property | Overrides | Effect |
+| --- | --- | --- |
+| `elide.builder.javac.enable` | `elide { compiler = ... }` | `false` removes Elide from the compile path entirely and reverts to stock `javac`, with no other change to the build |
+| `elide.builder.maven.install.enable` | the extension's `install && maven` decision | `true` forces the Maven installer on even when `install` is left at its default |
+
+Set them on the command line (`-Pelide.builder.javac.enable=false`) or in `gradle.properties`. Any value other than
+`true` parses as `false`. They are intended for bisecting a build or comparing against stock `javac`, not for permanent
+configuration — prefer the extension, which is visible in the build script.
+
+`dependencyMode = GRADLE` requires the Maven installer to stay off, so passing 
+`-Pelide.builder.maven.install.enable=true` on such a project turns an otherwise-valid configuration into a hard
+failure (`dependencyMode GRADLE requires install = false; ...`).
 
 ### Java and Kotlin formatting
 

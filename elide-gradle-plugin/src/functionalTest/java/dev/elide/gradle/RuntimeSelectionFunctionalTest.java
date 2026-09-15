@@ -2,6 +2,7 @@ package dev.elide.gradle;
 
 import org.gradle.testkit.runner.BuildResult;
 import org.gradle.testkit.runner.GradleRunner;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -54,6 +55,94 @@ class RuntimeSelectionFunctionalTest {
                 "Elide PATH runtime was requested but no executable was found"), compile.getOutput());
     }
 
+    @Test
+    void autoModeSkipsAnOutdatedPathRuntimeAndPrefersTheManagedRuntime() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The version-reporting fixture is a POSIX shell script.");
+        Path projectDirectory = temporaryDirectory.resolve("outdated-path-auto");
+        Path executableDirectory = projectDirectory.resolve("bin");
+        writeVersionReportingExecutable(executableDirectory, "1.4.9+20260101.000000");
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                    id 'java'
+                }
+                elide { runtime { mode = dev.elide.gradle.ElideRuntimeMode.AUTO } }
+                """);
+
+        // prepareElideRuntime is always registered, so its presence in a dry run proves nothing.
+        // Building offline instead forces managed preparation to run and name the cache path it
+        // wanted, which only happens when selection actually chose the managed runtime.
+        BuildResult result = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
+                .withArguments("compileJava", "--offline")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("is not cached at"), result.getOutput());
+    }
+
+    @Test
+    void pathModeRejectsAnOutdatedRuntimeWithAnActionableMessage() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The version-reporting fixture is a POSIX shell script.");
+        Path projectDirectory = temporaryDirectory.resolve("outdated-path-strict");
+        Path executableDirectory = projectDirectory.resolve("bin");
+        writeVersionReportingExecutable(executableDirectory, "1.4.9+20260101.000000");
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                    id 'java'
+                }
+                elide { runtime { mode = dev.elide.gradle.ElideRuntimeMode.PATH } }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
+                .withArguments("compileJava")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("reports version 1.4.9"), result.getOutput());
+        assertTrue(result.getOutput().contains("1.5.1 or newer is required"), result.getOutput());
+    }
+
+    @Test
+    void autoModeAcceptsARuntimeNewerThanTheConfiguredVersionWithoutProvisioning() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The version-reporting fixture is a POSIX shell script.");
+        Path projectDirectory = temporaryDirectory.resolve("newer-path");
+        Path executableDirectory = projectDirectory.resolve("bin");
+        // Newer than the configured 1.5.1, and numerically so: 1.10.0 must not be read as 1.1.
+        writeVersionReportingExecutable(executableDirectory, "1.10.0+20270101.aaaaaaa");
+        Files.createDirectories(projectDirectory.resolve("src/main/java/example"));
+        Files.writeString(projectDirectory.resolve("src/main/java/example/Fixture.java"), """
+                package example;
+                public final class Fixture { }
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                    id 'java'
+                }
+                elide { runtime { mode = dev.elide.gradle.ElideRuntimeMode.AUTO } }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory, environmentWithPath(executableDirectory))
+                .withArguments("compileJava", "--offline")
+                .build();
+
+        assertFalse(result.getOutput().contains("is not cached at"), result.getOutput());
+    }
+
+    private static void writeVersionReportingExecutable(Path directory, String version) throws IOException {
+        Files.createDirectories(directory);
+        Path executable = directory.resolve("elide");
+        Files.writeString(executable, "#!/bin/sh\n"
+                + "if [ \"${1-}\" = '--version' ]; then printf '" + version + "\\n'; exit 0; fi\n"
+                + "exit 0\n");
+        executable.toFile().setExecutable(true);
+    }
+
     private void assertConfigurationIsPure(boolean explicitRuntime) throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("project");
         Path executableDirectory = projectDirectory.resolve("bin");
@@ -64,7 +153,12 @@ class RuntimeSelectionFunctionalTest {
             Files.copy(Path.of(System.getProperty("java.home")).resolve("bin/java.exe"), executable);
         } else {
             Files.writeString(executable,
-                    "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
+                    "#!/bin/sh\n"
+                            // The PATH variant is version-probed, so the fixture must answer
+                            // --version, without recording it: the log below is asserted against.
+                            // Tracks ElideExtension.DEFAULT_RUNTIME_VERSION; update both together.
+                            + "if [ \"${1-}\" = '--version' ]; then printf '1.5.1+20260903.fixture\\n'; exit 0; fi\n"
+                            + "printf '%s\\n' \"$*\" >> '" + shellQuote(invocationLog) + "'\n");
         }
         executable.toFile().setExecutable(true);
         Files.createDirectories(projectDirectory.resolve("src/main/java/example"));

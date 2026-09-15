@@ -51,7 +51,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
         });
         project.getPluginManager().withPlugin(JAVA_PLUGIN_ID, ignored ->
                 project.getTasks().withType(JavaCompile.class).configureEach(task -> {
-                    if (!enableJavaCompiler(project, extension)) {
+                    if (!enableJavaCompiler(project, extension).get()) {
                         return;
                     }
                     configureJavaCompileToUseElide(task, resolution, extension);
@@ -159,11 +159,9 @@ public class ElideGradlePlugin implements Plugin<Project> {
                 .orElse(extensionEnabled);
     }
 
-    private boolean enableJavaCompiler(Project project, ElideExtension extension) {
-        Object configured = project.findProperty("elide.builder.javac.enable");
-        if (configured != null) {
-            return Boolean.parseBoolean(configured.toString());
-        }
-        return extension.getEnableJavaCompiler().get();
+    private Provider<Boolean> enableJavaCompiler(Project project, ElideExtension extension) {
+        return project.getProviders().gradleProperty("elide.builder.javac.enable")
+                .map(Boolean::parseBoolean)
+                .orElse(extension.getEnableJavaCompiler());
     }
 }

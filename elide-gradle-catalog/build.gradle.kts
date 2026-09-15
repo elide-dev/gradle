@@ -15,6 +15,7 @@ group = "dev.elide.gradle"
 version = projectVersion
 
 val mainPluginId = "dev.elide"
+val settingsPluginId = "dev.elide.settings"
 
 val allLibs = listOf(
   "core",
@@ -27,6 +28,7 @@ catalog {
     version("elide", latestElide)
     version("elidePlugin", projectVersion)
     plugin("elide", mainPluginId).versionRef("elidePlugin")
+    plugin("elideSettings", settingsPluginId).versionRef("elidePlugin")
     allLibs.forEach {
       library(it, "dev.elide", "elide-$it").versionRef("elide")
     }

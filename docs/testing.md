@@ -14,6 +14,13 @@ On PowerShell, set `$env:ELIDE_INTEGRATION_EXECUTABLE = (Get-Command elide).Sour
 `./gradlew.bat realNativeIntegrationTest`. The native task fails when its binary is missing; it never silently skips
 or restores its own test results from cache. The consumer builds inside the tests intentionally use caches.
 
+`realRuntimeSmoke` needs substantial scratch space. Each of its two tests provisions its own isolated Gradle User Home
+under a JUnit temporary directory declared `cleanup = NEVER`, so a full run extracts **two** independent ~2.5 GB runtime
+copies (~5 GB total, plus the downloads). On a 4 GB `/tmp` tmpfs both tests fail with
+`java.io.IOException: No space left on device` partway through extraction; point `TMPDIR` at a location on disk with
+headroom before running it. See [runtime management](runtime-management.md#cache-layout-and-reuse) for the per-entry
+footprint.
+
 PR CI installs pinned Elide `1.5.1+20260903` with a commit-pinned `elide-dev/setup-elide` action and requires the native
 suite on Linux, macOS, and Windows, plus the current Gradle/JDK build lanes. The managed smoke test independently
 provisions its runtime with an isolated Gradle User Home and PATH, so setup-elide cannot mask a provisioning failure.
@@ -24,6 +31,7 @@ All build lanes upload HTML and XML test reports even after failures.
 | Boundary | Regression evidence |
 | --- | --- |
 | Settings and provisioning | Explicit opt-in, inherited/overridden/catalog runtime versions, isolated projects, checksum failures, offline reuse, parallel provisioning; real managed install/compile/run |
+| Archive safety | Unit tests feed the inspector hostile TAR and ZIP archives (traversal, absolute path, symbolic link, hard link, GNU long name); functional tests serve a hostile archive over loopback in the host's own asset format — TGZ on Linux/macOS, ZIP on Windows — and assert no completion marker or staging directory survives |
 | Gradle compilation | Fixture matrix checks precise incremental source selection and compiler-content invalidation |
 | Real compilation | Gradle 7.6.4/8.14.5/9.7.1, one-shot and persistent: HTTP cache upload/restoration with local cache disabled, relocated checkout restoration, changed-source output, deleted-class cleanup; persistent compilation invalidates a replaced dependency JAR |
 | Worker service | Real main/test process reuse, compilation-error recovery in the same process, parallel module isolation and configuration-cache reuse; unit tests cover protocol framing and process shutdown |
@@ -31,6 +39,8 @@ All build lanes upload HTML and XML test reports even after failures.
 | Gradle-owned dependencies | Transitive conflict selection, locks, offline report restoration, catalog dependency export, checksum verification rejects tampering, ambient classpath exclusion, conflicting installer rejection |
 
 Some shell-fixture tests remain Unix-only; the native compilation matrix and native formatter tests have no OS skip.
+The archive inspector is covered on both asset formats: its ZIP and TAR rejection paths have unit coverage on every
+platform, and the end-to-end provisioning rejection has been run natively on both Linux (TGZ) and Windows (ZIP).
 Assertions check task outcomes and produced artifacts, not elapsed-time thresholds.
 
 ## Remaining coverage and scope

@@ -113,6 +113,9 @@ public abstract class PrepareElideRuntimeTask extends DefaultTask {
             Path archive = staging.resolve(platform.assetName());
             new ElideDownloader().downloadVerified(release, archive);
             String archiveChecksum = ElideDownloader.sha256(archive);
+            // Inspect entry metadata before handing the archive to Gradle, which cannot surface
+            // traversal or link entries itself.
+            ElideArchiveInspector.requireSafeArchive(archive, platform);
             extract(archive, staging, platform);
             Path stagedExecutable = staging.resolve("bin").resolve(platform.executableName());
             validateExecutable(stagedExecutable, platform);

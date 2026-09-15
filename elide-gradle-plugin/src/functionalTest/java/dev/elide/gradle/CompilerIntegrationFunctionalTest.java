@@ -209,6 +209,36 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
+    void preservesChildDiagnosticOutputWhenOrdinaryEnvironmentValuesAppearInIt() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The diagnostic fixture uses a POSIX fake executable.");
+        String diagnostic = "Main.java:12: error: cannot find symbol 106 [C] version 1.5.2";
+        Path projectDirectory = temporaryDirectory.resolve("legible-diagnostic-project");
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf '%%s\\n' '%s'
+                exit 23
+                """.formatted(diagnostic));
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        // Ordinary variables whose short values previously shredded this exact line, alongside a
+        // real secret that must still be removed.
+        BuildResult result = runner(projectDirectory, Map.of(
+                "DISPLAY", ":1",
+                "LC_TIME", "C",
+                "CLAUDECODE", "1",
+                "ELIDE_TEST_SECRET", SECRET))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains(diagnostic), result.getOutput());
+        assertFalse(result.getOutput().contains(SECRET), result.getOutput());
+    }
+
+    @Test
     void withholdsAllUntrustedDiagnosticFieldsWhenEnvironmentMetadataIsOverLimit() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The bounded-metadata fixture uses a POSIX fake executable.");
@@ -226,7 +256,9 @@ class CompilerIntegrationFunctionalTest {
                 """);
         Map<String, String> environment = new HashMap<>();
         for (int index = 0; index <= 256; index++) {
-            environment.put("ELIDE_TEST_COUNT_" + index, "metadata-value-" + index);
+            // Names must look secret-bearing, or the policy correctly ignores them and never
+            // reaches its bound.
+            environment.put("ELIDE_TEST_TOKEN_" + index, "metadata-value-" + index);
         }
 
         BuildResult result = runner(projectDirectory, environment)

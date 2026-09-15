@@ -9,6 +9,7 @@ import java.io.File;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -25,26 +26,20 @@ public final class ElideRuntimeResolver {
                 System.getProperty("os.name"),
                 System.getProperty("os.arch"));
         Provider<String> managedVersion = project.provider(() -> requireManagedVersion(extension));
+        ElideVersionProbe versionProbe = versionProbe(project);
         Provider<ElideRuntimeSelection> selection = project.provider(() -> {
             ElideRuntimeMode mode = effectiveMode(extension);
             java.util.Optional<Path> explicit = extension.getElideBin().isPresent()
                     ? java.util.Optional.of(extension.getElideBin().get().getAsFile().toPath())
                     : java.util.Optional.empty();
-            java.util.Optional<Path> installed = ElideRuntimeLocator.findInstalled(
-                    explicit, pathDirectories(project), platform);
-            if (mode != ElideRuntimeMode.MANAGED && installed.isPresent()) {
-                return new ElideRuntimeSelection(
-                        explicit.filter(installed.get()::equals).isPresent()
-                                ? ElideRuntimeSource.EXPLICIT
-                                : ElideRuntimeSource.PATH,
-                        installed.get());
-            }
-            if (mode == ElideRuntimeMode.PATH) {
-                throw new IllegalStateException("Elide PATH runtime was requested but no executable was found");
-            }
-            return new ElideRuntimeSelection(
-                    ElideRuntimeSource.MANAGED,
-                    managedExecutable(project, managedVersion.get(), platform));
+            return ElideRuntimeLocator.locate(
+                    mode,
+                    explicit,
+                    pathDirectories(project),
+                    () -> managedExecutable(project, managedVersion.get(), platform),
+                    platform,
+                    requiredRuntimeVersion(extension),
+                    versionProbe);
         });
         Provider<RegularFile> executable = project.getLayout().file(
                 selection.map(selected -> selected.executable().toFile()));
@@ -62,6 +57,40 @@ public final class ElideRuntimeResolver {
                     : ElideRuntimeMode.MANAGED;
         }
         return extension.getRuntimeMode().get();
+    }
+
+    /**
+     * The floor a PATH runtime must meet: the version the build would otherwise provision.
+     * Falls back to the pinned default when no version is configured, so selection can still
+     * proceed for modes that never need a managed runtime.
+     */
+    private static ElideVersion requiredRuntimeVersion(ElideExtension extension) {
+        String configured = extension.getRuntimeVersion().getOrNull();
+        return ElideVersion.parse(configured == null ? "" : configured)
+                .orElseGet(() -> ElideVersion.parse(ElideExtension.DEFAULT_RUNTIME_VERSION).orElseThrow());
+    }
+
+    /**
+     * Probes a candidate with {@code --version}. Uses Gradle's own exec provider so the result is a
+     * tracked configuration-cache input rather than a value baked into the cache entry, and memoizes
+     * per path so a build probes each candidate at most once.
+     */
+    private static ElideVersionProbe versionProbe(Project project) {
+        java.util.Map<Path, Optional<String>> probed = new java.util.concurrent.ConcurrentHashMap<>();
+        return executable -> probed.computeIfAbsent(executable, candidate -> {
+            try {
+                var output = project.getProviders().exec(spec -> {
+                    spec.setExecutable(candidate.toFile());
+                    spec.args("--version");
+                    spec.setIgnoreExitValue(true);
+                });
+                return Optional.ofNullable(output.getStandardOutput().getAsText().getOrNull())
+                        .filter(text -> !text.isBlank());
+            } catch (RuntimeException exception) {
+                // An unreadable candidate is simply not usable; selection continues past it.
+                return Optional.empty();
+            }
+        });
     }
 
     private static List<Path> pathDirectories(Project project) {
