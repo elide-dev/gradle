@@ -8,13 +8,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/**
- * Pure runtime selection logic, independent of Gradle and process execution.
- *
- * <p>Package-private along with {@link ElideVersionProbe} and {@link ElideVersion}: this is plugin
- * machinery, and a public entry point taking package-private parameter types could not be called
- * from outside the package anyway.
- */
+/** Pure runtime selection logic, independent of Gradle and process execution. */
 final class ElideRuntimeLocator {
     private ElideRuntimeLocator() {
     }

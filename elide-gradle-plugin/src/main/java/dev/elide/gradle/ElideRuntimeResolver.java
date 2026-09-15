@@ -73,14 +73,10 @@ public final class ElideRuntimeResolver {
      *
      * <p>Resolution can fail outright -- a catalog-backed version throws for a missing catalog or
      * alias. Only {@code PATH} tolerates that, because it never provisions, so a version it will
-     * never download must not break it; every other mode is going to need that same version and is
-     * better served by the underlying error than by a runtime chosen without a check.
+     * never download must not break it.
      *
      * <p>A version that resolves but is not a semantic version -- a rich version such as
-     * {@code [1.5,2.0)} -- yields no floor in any mode, with a warning. The raw string is still
-     * what managed provisioning downloads, so failing here would reject a configuration that is
-     * otherwise workable; silently substituting the pinned default would be worse still, because
-     * the floor would then disagree with what is actually provisioned.
+     * {@code [1.5,2.0)} -- yields no floor in any mode, with a warning.
      *
      * @return the floor, or {@code null} when there is none and the version check must be skipped
      */
