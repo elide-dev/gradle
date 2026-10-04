@@ -54,7 +54,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: "Setup: Gradle"
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
       - name: "Integration: Real Elide install, compile, and run"
         working-directory: .
         run: ${{ matrix.gradle-command }} realRuntimeSmoke -Pelide.runtime.mode=MANAGED
