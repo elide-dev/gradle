@@ -8,14 +8,13 @@ import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
-import org.gradle.api.tasks.Input;
-import org.gradle.api.tasks.PathSensitive;
-import org.gradle.api.tasks.PathSensitivity;
 
 import java.nio.file.Path;
 import javax.inject.Inject;
 
 public class ElideExtension implements ElideExtensionConfig {
+    /** Also the floor for PATH runtime selection; when bumping, update the version the PATH
+     *  fixture reports in RuntimeSelectionFunctionalTest, or its probe will reject the fixture. */
     static final String DEFAULT_RUNTIME_VERSION = "1.5.1+20260903";
     private static final boolean USE_ROOT_FOR_DEPS = true;
     private static final String DEFAULT_DEV_ROOT = ".dev";
@@ -42,10 +41,10 @@ public class ElideExtension implements ElideExtensionConfig {
     /** Reuse Elide's Bazel compiler worker during this Gradle build. */
     public Property<Boolean> getPersistentCompiler() { return persistentCompiler; }
     public Property<ElideDependencyMode> getDependencyMode() { return dependencyMode; }
-    @PathSensitive(PathSensitivity.RELATIVE) protected RegularFileProperty projectManifest;
-    @PathSensitive(PathSensitivity.ABSOLUTE) protected RegularFileProperty activeElideBin;
-    @PathSensitive(PathSensitivity.RELATIVE) protected DirectoryProperty activeDevRoot;
-    @PathSensitive(PathSensitivity.RELATIVE) @Input protected RegularFileProperty activeLockfile;
+    protected RegularFileProperty projectManifest;
+    protected RegularFileProperty activeElideBin;
+    protected DirectoryProperty activeDevRoot;
+    protected RegularFileProperty activeLockfile;
 
     @Override
     @Deprecated

@@ -113,6 +113,7 @@ public abstract class PrepareElideRuntimeTask extends DefaultTask {
             Path archive = staging.resolve(platform.assetName());
             new ElideDownloader().downloadVerified(release, archive);
             String archiveChecksum = ElideDownloader.sha256(archive);
+            ElideArchiveInspector.requireSafeArchive(archive, platform);
             extract(archive, staging, platform);
             Path stagedExecutable = staging.resolve("bin").resolve(platform.executableName());
             validateExecutable(stagedExecutable, platform);

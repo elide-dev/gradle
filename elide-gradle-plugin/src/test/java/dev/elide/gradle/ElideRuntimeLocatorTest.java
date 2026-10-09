@@ -18,10 +18,15 @@ import static dev.elide.gradle.ElideRuntimeMode.PATH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ElideRuntimeLocatorTest {
     private static final ElidePlatform LINUX = ElidePlatform.detect("Linux", "amd64");
     private static final ElidePlatform WINDOWS = ElidePlatform.detect("Windows 11", "amd64");
+    private static final ElideVersion REQUIRED = ElideVersion.parse("1.5.1+20260903").orElseThrow();
+    private static final String CURRENT = "1.5.1+20260903.4c6cdc7";
+    private static final String OUTDATED = "1.4.9+20260101.0000000";
+    private static final java.util.function.Consumer<String> IGNORE_REJECTION = message -> { };
 
     @TempDir
     Path tempDir;
@@ -118,15 +123,163 @@ class ElideRuntimeLocatorTest {
         Path managed = tempDir.resolve("managed").resolve("elide.exe");
 
         ElideRuntimeSelection selection = ElideRuntimeLocator.locate(
-                PATH, Optional.empty(), List.of(executable.getParent()), managed, WINDOWS);
+                PATH, Optional.empty(), List.of(executable.getParent()), () -> managed, WINDOWS,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.PATH, selection.source());
         assertEquals(executable, selection.executable());
     }
 
+    @Test
+    void autoModeSkipsAnOutdatedPathRuntimeAndFallsBackToManaged() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = locate(AUTO, Optional.empty(), List.of(pathBin.getParent()), managed,
+                reporting(OUTDATED));
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+        assertEquals(managed, selection.executable());
+    }
+
+    @Test
+    void autoModeAcceptsANewerPathRuntime() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = locate(AUTO, Optional.empty(), List.of(pathBin.getParent()), managed,
+                reporting("1.10.0+20270101.aaaaaaa"));
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(pathBin, selection.executable());
+    }
+
+    @Test
+    void pathModeNamesTheOutdatedRuntimeAndTheRequiredVersion() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var failure = assertThrows(IllegalStateException.class,
+                () -> locate(PATH, Optional.empty(), List.of(pathBin.getParent()), managed,
+                        reporting(OUTDATED)));
+
+        assertTrue(failure.getMessage().contains("1.4.9"), failure.getMessage());
+        assertTrue(failure.getMessage().contains("1.5.1"), failure.getMessage());
+    }
+
+    @Test
+    void pathLookupPrefersTheFirstAcceptableCandidateRatherThanTheFirstUsableOne() throws IOException {
+        var first = executable(tempDir.resolve("first").resolve("elide"));
+        var second = executable(tempDir.resolve("second").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = locate(AUTO, Optional.empty(), List.of(first.getParent(), second.getParent()),
+                managed, candidate -> Optional.of(candidate.equals(first) ? OUTDATED : CURRENT));
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(second, selection.executable());
+    }
+
+    @Test
+    void anExplicitRuntimeIsNotVersionChecked() throws IOException {
+        var explicit = executable(tempDir.resolve("explicit"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = locate(AUTO, Optional.of(explicit), List.of(), managed, reporting(OUTDATED));
+
+        assertEquals(ElideRuntimeSource.EXPLICIT, selection.source());
+        assertEquals(explicit, selection.executable());
+    }
+
+    @Test
+    void aCandidateWithUnreadableVersionOutputIsNotUsable() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = locate(AUTO, Optional.empty(), List.of(pathBin.getParent()), managed,
+                executable -> Optional.empty());
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
+    @Test
+    void managedModeNeverProbesACandidate() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = locate(MANAGED, Optional.empty(), List.of(pathBin.getParent()), managed,
+                executable -> {
+                    throw new AssertionError("MANAGED must not execute a candidate");
+                });
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
+    @Test
+    void anUnresolvableFloorAcceptsTheFirstUsablePathCandidate() throws IOException {
+        // A catalog-backed runtime.version throws for a missing alias. Modes that never provision
+        // must not be broken by that, so an unknown floor means no version gating at all.
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = ElideRuntimeLocator.locate(
+                PATH, Optional.empty(), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> null,
+                candidate -> {
+                    throw new AssertionError("No floor means no probe");
+                }, IGNORE_REJECTION);
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(pathBin, selection.executable());
+    }
+
+    @Test
+    void theFloorIsNotResolvedWhenThereIsNoPathCandidateToJudge() throws IOException {
+        var emptyBin = tempDir.resolve("empty");
+        Files.createDirectories(emptyBin);
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = ElideRuntimeLocator.locate(
+                AUTO, Optional.empty(), List.of(emptyBin), () -> managed, LINUX,
+                () -> {
+                    throw new AssertionError("The floor must not be resolved without a candidate");
+                },
+                reporting(CURRENT), IGNORE_REJECTION);
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
+    @Test
+    void theFloorIsNotResolvedForManagedMode() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+
+        var selection = ElideRuntimeLocator.locate(
+                MANAGED, Optional.empty(), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> {
+                    throw new AssertionError("MANAGED must not resolve a PATH floor");
+                },
+                reporting(CURRENT), IGNORE_REJECTION);
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
     private ElideRuntimeSelection locate(ElideRuntimeMode mode, Optional<Path> explicit,
                                          List<Path> pathDirectories, Path managed) {
-        return ElideRuntimeLocator.locate(mode, explicit, pathDirectories, managed, LINUX);
+        return locate(mode, explicit, pathDirectories, managed, reporting(CURRENT));
+    }
+
+    private ElideRuntimeSelection locate(ElideRuntimeMode mode, Optional<Path> explicit,
+                                         List<Path> pathDirectories, Path managed,
+                                         ElideVersionProbe probe) {
+        return ElideRuntimeLocator.locate(
+                mode, explicit, pathDirectories, () -> managed, LINUX, () -> REQUIRED, probe,
+                IGNORE_REJECTION);
+    }
+
+    /** Every candidate reports the same version. */
+    private static ElideVersionProbe reporting(String version) {
+        return executable -> Optional.of(version);
     }
 
     private static Path executable(Path path) throws IOException {

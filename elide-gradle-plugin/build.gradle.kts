@@ -31,6 +31,10 @@ publishing {
 }
 
 dependencies {
+    // Archive entry inspection before extraction. Every supported Gradle bundles commons-compress in
+    // its own distribution (1.21 on the 7.6.4 consumer floor), and that copy may win the classloader
+    // at runtime, so keep usage within the 1.21 API surface.
+    implementation(libs.commons.compress)
     testImplementation(gradleTestKit())
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -45,6 +49,16 @@ dependencyLocking {
     lockAllConfigurations()
 }
 
+// The Plugin Publish plugin auto-applies the Gradle plugin-compatibility plugin, which attaches a
+// `compatibility` extension to each PluginDeclaration. Kotlin DSL generates no accessor for it, so
+// it is configured by type.
+fun org.gradle.plugin.devel.PluginDeclaration.declareConfigurationCacheSupport() {
+    (this as ExtensionAware).extensions
+        .configure<org.gradle.plugin.compatibility.CompatibilityExtension> {
+            features.configurationCache.set(true)
+        }
+}
+
 gradlePlugin {
     website = "https://elide.dev"
     vcsUrl = "https://github.com/elide-dev/gradle"
@@ -55,6 +69,10 @@ gradlePlugin {
         implementationClass = "dev.elide.gradle.ElideGradlePlugin"
         description = "Use the Elide runtime and build tools from Gradle"
         tags.set(listOf("elide", "graalvm", "java", "javac", "maven", "dependencies", "resolver"))
+        // Published descriptors otherwise report UNDECLARED, despite configuration-cache reuse
+        // being asserted by the functional suites. No Kotlin DSL accessor is generated for this
+        // nested extension, so configure it by type.
+        declareConfigurationCacheSupport()
     }
 
     plugins.create("elideSettings") {
@@ -63,7 +81,19 @@ gradlePlugin {
         implementationClass = "dev.elide.gradle.ElideSettingsPlugin"
         description = "Configure the Elide runtime once for a Gradle build"
         tags.set(listOf("elide", "settings", "toolchain", "dependencies"))
+        declareConfigurationCacheSupport()
     }
+}
+
+// The benchmark fixtures load the plugin from a flat classpath rather than resolving it, so they
+// need its runtime dependencies staged alongside the jar. Derived from the real runtime classpath
+// so it cannot drift from the declared dependencies.
+tasks.register<Sync>("benchmarkClasspath") {
+    group = "build"
+    description = "Stages the plugin jar and its runtime dependencies for the benchmark fixtures."
+    from(tasks.named("jar"))
+    from(configurations.named("runtimeClasspath"))
+    into(layout.buildDirectory.dir("benchmark-classpath"))
 }
 
 // Add a source set and a task for a functional test suite

@@ -1,7 +1,7 @@
 buildscript {
     // Prepared from this checkout before timing; no included plugin build in the measured graph.
     dependencies {
-        classpath files('../build/elide-gradle-plugin.jar')
+        classpath fileTree(dir: '../build/plugin-classpath', include: '*.jar')
     }
 }
 

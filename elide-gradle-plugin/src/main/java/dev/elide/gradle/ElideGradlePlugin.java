@@ -30,7 +30,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
                         });
         ElideExtension extension = project.getExtensions().create(
                 ELIDE_EXTENSION_NAME, ElideExtension.class, project, buildConfiguration);
-        ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension);
+        ElideRuntimeResolution resolution = ElideRuntimeResolver.resolve(project, extension, buildConfiguration);
         ElideFormatting.configure(project, resolution);
         ElideDependencies.configure(project);
         resolution.preparationTask().configure(task -> task.usesService(buildConfiguration));
@@ -51,7 +51,7 @@ public class ElideGradlePlugin implements Plugin<Project> {
         });
         project.getPluginManager().withPlugin(JAVA_PLUGIN_ID, ignored ->
                 project.getTasks().withType(JavaCompile.class).configureEach(task -> {
-                    if (!enableJavaCompiler(project, extension)) {
+                    if (!enableJavaCompiler(project, extension).get()) {
                         return;
                     }
                     configureJavaCompileToUseElide(task, resolution, extension);
@@ -68,7 +68,11 @@ public class ElideGradlePlugin implements Plugin<Project> {
         arguments.getElideExecutable().set(resolution.executable());
         ElideTaskInputs.runtime(task, resolution);
         task.getInputs().property("elide.launcherJavaVersion", System.getProperty("java.runtime.version"));
-        task.getInputs().property("elide.runtimeVersion", extension.getRuntimeVersion());
+        // Only the managed runtime is identified by this version; a PATH or explicit runtime is
+        // keyed by the executable itself. Querying it unconditionally also made a version that
+        // cannot be resolved fail compilation in modes that never provision it.
+        task.getInputs().property("elide.runtimeVersion", resolution.source().map(selected ->
+                selected == ElideRuntimeSource.MANAGED ? extension.getRuntimeVersion().get() : ""));
         for (String name : List.of("CLASSPATH", "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "_JAVA_OPTIONS")) {
             task.getInputs().property("elide.environment." + name,
                     task.getProject().getProviders().environmentVariable(name).orElse(""));
@@ -159,11 +163,9 @@ public class ElideGradlePlugin implements Plugin<Project> {
                 .orElse(extensionEnabled);
     }
 
-    private boolean enableJavaCompiler(Project project, ElideExtension extension) {
-        Object configured = project.findProperty("elide.builder.javac.enable");
-        if (configured != null) {
-            return Boolean.parseBoolean(configured.toString());
-        }
-        return extension.getEnableJavaCompiler().get();
+    private Provider<Boolean> enableJavaCompiler(Project project, ElideExtension extension) {
+        return project.getProviders().gradleProperty("elide.builder.javac.enable")
+                .map(Boolean::parseBoolean)
+                .orElse(extension.getEnableJavaCompiler());
     }
 }

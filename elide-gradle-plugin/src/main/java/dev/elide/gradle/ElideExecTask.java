@@ -221,8 +221,9 @@ public abstract class ElideExecTask extends DefaultTask {
 
         private static RedactionPolicy create() {
             List<RedactionValue> values = new ArrayList<>();
-            for (String value : System.getenv().values()) {
-                if (value == null || value.isEmpty()) {
+            for (java.util.Map.Entry<String, String> variable : System.getenv().entrySet()) {
+                String value = variable.getValue();
+                if (!ElideSecretPolicy.isSensitive(variable.getKey(), value)) {
                     continue;
                 }
                 if (values.size() == MAX_REDACTION_VALUES || value.length() > MAX_REDACTION_VALUE_CHARS) {
