@@ -85,6 +85,8 @@ release is cut.
 
 ### Fixed
 
+- Fixed managed downloads of Elide releases and release candidates: their GitHub release tags carry a leading `v`
+  (`v1.6.0-rc.2`), so `version = "1.6.0-rc.2"` previously requested a release that does not exist.
 - Fixed failure diagnostics being destroyed by over-broad redaction. Every inherited environment value was previously
   substituted, so ordinary short values such as `DISPLAY=:1` or `LC_TIME=C` mangled line numbers and identifiers in a
   failing command's output. A value is redacted now when its name says it holds a credential, or when the value itself

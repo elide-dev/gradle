@@ -69,6 +69,43 @@ jobs:
             elide-gradle-plugin/build/reports/tests/
             elide-gradle-plugin/build/test-results/
 
+  native-elide-1-6:
+    name: "Native integration (Ubuntu, Elide 1.6.0-rc.2)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: "Setup: Harden Runner"
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2
+        with:
+          disable-sudo: true
+          egress-policy: audit
+      - name: "Setup: Checkout"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: "Setup: Java 17"
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: "Setup: Gradle"
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: "Setup: Elide"
+        id: elide
+        uses: elide-dev/setup-elide@10fbf30cebffd3538c428369950dc2094137f02b
+        with:
+          custom_url: "https://github.com/elide-dev/elide/releases/download/v1.6.0-rc.2/elide.linux-amd64.tgz"
+          version_tag: "1.6.0-rc.2"
+          telemetry: "false"
+      - name: "Integration: Native workers, caches, and formatters"
+        env:
+          ELIDE_INTEGRATION_EXECUTABLE: ${{ steps.elide.outputs.path }}
+        run: ./gradlew --stacktrace --no-daemon realNativeIntegrationTest
+
   build-current-toolchain:
     name: "Build (Ubuntu, Java ${{ matrix.java }}, Gradle ${{ matrix.gradle-version }})"
     runs-on: ubuntu-latest

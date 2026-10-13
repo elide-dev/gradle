@@ -60,8 +60,12 @@ shares the resolved policy and managed-preparation coordination across every opt
 Production releases are read from:
 
 ```text
-https://github.com/elide-dev/elide/releases/download/<version>/<asset>
+https://github.com/elide-dev/elide/releases/download/<tag>/<asset>
 ```
+
+The tag is the version itself for nightlies (`1.5.1+20260903`) and the version with a leading `v` for releases and
+release candidates: `version = "1.6.0-rc.2"` downloads from the `v1.6.0-rc.2` release. A configured leading `v` is
+kept as written.
 
 For the pinned `1.5.1+20260903` release, the available assets are:
 
