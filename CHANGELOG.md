@@ -8,6 +8,11 @@ release is cut.
 
 ## [Unreleased]
 
+### Changed
+
+- The plugins and the catalog are published to Maven Central instead of the Gradle Plugin Portal. Add `mavenCentral()`
+  to `pluginManagement.repositories` in `settings.gradle.kts`.
+
 ## [1.1.0] - 2026-10-12
 
 ### Added

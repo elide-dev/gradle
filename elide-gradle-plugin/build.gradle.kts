@@ -1,8 +1,9 @@
+import com.vanniktech.maven.publish.GradlePublishPlugin
+
 plugins {
     `java-gradle-plugin`
-    `maven-publish`
-    signing
     alias(libs.plugins.plugin.publish)
+    alias(libs.plugins.maven.publish)
 }
 
 java {
@@ -26,6 +27,37 @@ publishing {
     repositories {
         maven {
             url = uri(rootProject.layout.buildDirectory.dir("elide-maven"))
+        }
+    }
+}
+
+// Published to Maven Central, plugin markers included; the Plugin Publish plugin stays applied for its sources and
+// javadoc jars and the configuration-cache compatibility declaration.
+mavenPublishing {
+    configure(GradlePublishPlugin())
+    publishToMavenCentral(automaticRelease = true)
+    signAllPublications()
+    pom {
+        name = "Elide Gradle Plugin"
+        description = "Use the Elide runtime and build tools from Gradle"
+        url = "https://elide.dev"
+        inceptionYear = "2023"
+        licenses {
+            license {
+                name = "MIT License"
+                url = "https://opensource.org/license/mit"
+            }
+        }
+        developers {
+            developer {
+                name = "Elide Technologies, Inc."
+                url = "https://elide.dev"
+            }
+        }
+        scm {
+            url = "https://github.com/elide-dev/gradle"
+            connection = "scm:git:https://github.com/elide-dev/gradle.git"
+            developerConnection = "scm:git:ssh://git@github.com/elide-dev/gradle.git"
         }
     }
 }

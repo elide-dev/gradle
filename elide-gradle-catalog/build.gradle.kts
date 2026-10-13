@@ -1,7 +1,8 @@
+import com.vanniktech.maven.publish.VersionCatalog
+
 plugins {
   `version-catalog`
-  `maven-publish`
-  signing
+  alias(libs.plugins.maven.publish)
 }
 
 val latestElide = findProperty("elide.version")?.toString() ?: error(
@@ -41,22 +42,33 @@ publishing {
       url = uri(rootProject.layout.buildDirectory.dir("elide-maven"))
     }
   }
+}
 
-  publications {
-    create<MavenPublication>("maven") {
-      from(components["versionCatalog"])
-
-      pom {
-        name = "Elide Gradle Catalog"
-        description = "Provides mapped versions for Elide and related libraries and plugins."
-        inceptionYear = "2023"
+mavenPublishing {
+  configure(VersionCatalog())
+  publishToMavenCentral(automaticRelease = true)
+  signAllPublications()
+  pom {
+    name = "Elide Gradle Catalog"
+    description = "Provides mapped versions for Elide and related libraries and plugins."
+    inceptionYear = "2023"
+    url = "https://elide.dev"
+    licenses {
+      license {
+        name = "MIT License"
+        url = "https://opensource.org/license/mit"
+      }
+    }
+    developers {
+      developer {
+        name = "Elide Technologies, Inc."
         url = "https://elide.dev"
       }
     }
+    scm {
+      url = "https://github.com/elide-dev/gradle"
+      connection = "scm:git:https://github.com/elide-dev/gradle.git"
+      developerConnection = "scm:git:ssh://git@github.com/elide-dev/gradle.git"
+    }
   }
-}
-
-signing {
-  useGpgCmd()
-  sign(publishing.publications["maven"])
 }
