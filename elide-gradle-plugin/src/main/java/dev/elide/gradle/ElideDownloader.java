@@ -1,5 +1,8 @@
 package dev.elide.gradle;
 
+import org.gradle.api.logging.Logger;
+import org.gradle.api.logging.Logging;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,15 +21,36 @@ import java.util.regex.Pattern;
 /** Downloads Elide release archives only after their published SHA-256 is verified. */
 public final class ElideDownloader {
     private static final Pattern SHA256_LINE = Pattern.compile("^([0-9a-fA-F]{64})(?:\\s+\\*?\\S+)?$");
+    private static final Logger LOGGER = Logging.getLogger(ElideDownloader.class);
 
     private final HttpClient client;
+    private final PathDeleter pathDeleter;
 
     public ElideDownloader() {
-        this(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build());
+        this(defaultClient(), Files::deleteIfExists);
     }
 
     ElideDownloader(HttpClient client) {
+        this(client, Files::deleteIfExists);
+    }
+
+    ElideDownloader(PathDeleter pathDeleter) {
+        this(defaultClient(), pathDeleter);
+    }
+
+    ElideDownloader(HttpClient client, PathDeleter pathDeleter) {
         this.client = client;
+        this.pathDeleter = pathDeleter;
+    }
+
+    private static HttpClient defaultClient() {
+        return HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
+    }
+
+    /** Deletes one temporary download path; the default implementation calls {@link Files#deleteIfExists}. */
+    @FunctionalInterface
+    interface PathDeleter {
+        void delete(Path temporary) throws IOException;
     }
 
     public void downloadVerified(ElideRelease release, Path archiveTarget) throws IOException, InterruptedException {
@@ -61,17 +85,58 @@ public final class ElideDownloader {
                 deleteTemporaryFile(checksumTemporary, failure);
                 deleteTemporaryFile(archiveTemporary, failure);
             } else {
-                Throwable cleanupFailure = deleteTemporaryFiles(checksumTemporary, archiveTemporary);
-                if (cleanupFailure != null) {
-                    throwCleanupFailure(cleanupFailure);
-                }
+                cleanTemporaryFile(checksumTemporary);
+                cleanTemporaryFile(archiveTemporary);
             }
         }
     }
 
-    private static Throwable deleteTemporaryFiles(Path checksumTemporary, Path archiveTemporary) {
-        Throwable failure = deleteTemporaryFile(checksumTemporary, null);
-        return deleteTemporaryFile(archiveTemporary, failure);
+    private void cleanTemporaryFile(Path temporary) {
+        if (temporary == null) {
+            return;
+        }
+        try {
+            deleteTempBestEffort(temporary);
+        } catch (RuntimeException | Error exception) {
+            registerDeleteOnExit(temporary);
+            LOGGER.warn(
+                    "Unable to delete temporary Elide download file '" + temporary
+                            + "'; it may be removed when the build exits.",
+                    exception);
+        }
+    }
+
+    private void deleteTempBestEffort(Path temporary) {
+        IOException ioFailure = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                pathDeleter.delete(temporary);
+                return;
+            } catch (IOException exception) {
+                ioFailure = exception;
+                if (attempt < 3) {
+                    try {
+                        Thread.sleep(50L * attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }
+        }
+        registerDeleteOnExit(temporary);
+        LOGGER.warn(
+                "Unable to delete temporary Elide download file '" + temporary
+                        + "'; it will be removed when the build exits.",
+                ioFailure);
+    }
+
+    private static void registerDeleteOnExit(Path temporary) {
+        try {
+            temporary.toFile().deleteOnExit();
+        } catch (RuntimeException ignored) {
+            // Best effort; the JVM may still remove the file on exit when it can.
+        }
     }
 
     private static Throwable deleteTemporaryFile(Path temporary, Throwable failure) {
@@ -92,19 +157,6 @@ public final class ElideDownloader {
         }
         failure.addSuppressed(next);
         return failure;
-    }
-
-    private static void throwCleanupFailure(Throwable failure) throws IOException {
-        if (failure instanceof IOException exception) {
-            throw exception;
-        }
-        if (failure instanceof RuntimeException exception) {
-            throw exception;
-        }
-        if (failure instanceof Error exception) {
-            throw exception;
-        }
-        throw new IOException("Unable to clean temporary Elide download", failure);
     }
 
     public static String parseSha256(String checksumFile) {
