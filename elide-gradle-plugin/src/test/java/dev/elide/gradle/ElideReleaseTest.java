@@ -35,5 +35,6 @@ class ElideReleaseTest {
                 new ElideRelease(base, "v1.6.0-rc.2", linux).archiveUri().toString());
         assertEquals("v1.6.0", new ElideRelease(base, "1.6.0", linux).tag());
         assertEquals("1.5.1+20260903", new ElideRelease(base, "1.5.1+20260903", linux).tag());
+        assertEquals("fixture-1.0", new ElideRelease(base, "fixture-1.0", linux).tag());
     }
 }

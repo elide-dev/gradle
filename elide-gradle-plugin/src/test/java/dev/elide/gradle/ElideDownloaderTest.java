@@ -80,13 +80,13 @@ class ElideDownloaderTest {
 
         static FixtureServer start(byte[] archive, String checksum) throws IOException {
             HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-            server.createContext("/releases/1.5.1/elide.linux-amd64.tgz", exchange -> {
+            server.createContext("/releases/v1.5.1/elide.linux-amd64.tgz", exchange -> {
                 exchange.sendResponseHeaders(200, archive.length);
                 exchange.getResponseBody().write(archive);
                 exchange.close();
             });
             byte[] checksumBytes = (checksum + "  elide.linux-amd64.tgz\n").getBytes(StandardCharsets.UTF_8);
-            server.createContext("/releases/1.5.1/elide.linux-amd64.tgz.sha256", exchange -> {
+            server.createContext("/releases/v1.5.1/elide.linux-amd64.tgz.sha256", exchange -> {
                 exchange.sendResponseHeaders(200, checksumBytes.length);
                 exchange.getResponseBody().write(checksumBytes);
                 exchange.close();
