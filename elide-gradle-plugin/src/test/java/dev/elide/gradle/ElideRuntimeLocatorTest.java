@@ -376,6 +376,7 @@ class ElideRuntimeLocatorTest {
     }
 
     @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
     void windowsAcceptsAnExplicitRegularExeWithoutTheUnixExecutableBit() throws IOException {
         var explicit = tempDir.resolve("explicit").resolve("elide.exe");
         Files.createDirectories(explicit.getParent());
