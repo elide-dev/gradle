@@ -104,8 +104,13 @@ class ElideWorkerProcessTest {
     public static class Fixture {
         public static void main(String[] args) throws Exception {
             for (int id = 1; ; id++) {
-                int length = System.in.read();
-                if (length == -1) return;
+                int length = 0, shift = 0, b;
+                do {
+                    b = System.in.read();
+                    if (b == -1) return;
+                    length |= (b & 0x7F) << shift;
+                    shift += 7;
+                } while ((b & 0x80) != 0);
                 byte[] request = System.in.readNBytes(length);
                 if (request.length != length || request[length - 1] != id) System.exit(9);
                 System.out.write(new byte[] {4, 8, (byte) (id == 2 ? 1 : 0), 24, (byte) id});
@@ -126,8 +131,13 @@ class ElideWorkerProcessTest {
             java.nio.file.Files.writeString(
                     marker, classpath == null ? "<unset>" : classpath);
             for (int id = 1; ; id++) {
-                int length = System.in.read();
-                if (length == -1) return;
+                int length = 0, shift = 0, b;
+                do {
+                    b = System.in.read();
+                    if (b == -1) return;
+                    length |= (b & 0x7F) << shift;
+                    shift += 7;
+                } while ((b & 0x80) != 0);
                 byte[] request = System.in.readNBytes(length);
                 if (request.length != length || request[request.length - 1] != id) System.exit(9);
                 System.out.write(new byte[] {4, 8, 0, 24, (byte) id});

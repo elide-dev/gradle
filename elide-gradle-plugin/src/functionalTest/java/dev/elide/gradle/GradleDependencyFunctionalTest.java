@@ -175,7 +175,6 @@ class GradleDependencyFunctionalTest {
         Files.writeString(source, "public class Example {}\n");
         var environment = new java.util.HashMap<>(System.getenv());
         environment.put("CLASSPATH", "/ambient-gradle-mode-classpath");
-        environment.put("ELIDE_FIXTURE_CLASSPATH_MARKER", marker.toString());
         run("compileJava").withEnvironment(environment).build();
         assertEquals(
                 "<unset>",
@@ -205,7 +204,6 @@ class GradleDependencyFunctionalTest {
         Files.writeString(source, "public class Example {}\n");
         var environment = new java.util.HashMap<>(System.getenv());
         environment.put("CLASSPATH", "/ambient-legacy-mode-classpath");
-        environment.put("ELIDE_FIXTURE_CLASSPATH_MARKER", marker.toString());
         run("compileJava").withEnvironment(environment).build();
         assertEquals(
                 "/ambient-legacy-mode-classpath",
@@ -229,13 +227,18 @@ class GradleDependencyFunctionalTest {
                 "import java.nio.file.*;\n"
                         + "public final class WorkerFixture {\n"
                         + "  public static void main(String[] args) throws Exception {\n"
-                        + "    Path marker = Path.of(System.getenv(\"ELIDE_FIXTURE_CLASSPATH_MARKER\"));\n"
+                        + "    Path marker = Path.of(args[0]);\n"
                         + "    String classpath = System.getenv(\"CLASSPATH\");\n"
                         + "    Files.createDirectories(marker.getParent());\n"
                         + "    Files.writeString(marker, classpath == null ? \"<unset>\" : classpath);\n"
                         + "    for (int id = 1; ; id++) {\n"
-                        + "      int length = System.in.read();\n"
-                        + "      if (length == -1) return;\n"
+                        + "      int length = 0, shift = 0, b;\n"
+                        + "      do {\n"
+                        + "        b = System.in.read();\n"
+                        + "        if (b == -1) return;\n"
+                        + "        length |= (b & 0x7F) << shift;\n"
+                        + "        shift += 7;\n"
+                        + "      } while ((b & 0x80) != 0);\n"
                         + "      byte[] request = System.in.readNBytes(length);\n"
                         + "      if (request.length != length || request[request.length - 1] != id) System.exit(9);\n"
                         + "      System.out.write(new byte[] {4, 8, 0, 24, (byte) id});\n"
@@ -252,7 +255,7 @@ class GradleDependencyFunctionalTest {
                 executable,
                 "#!/bin/sh\nshift\nexec '"
                         + Path.of(System.getProperty("java.home"), "bin", "java")
-                        + "' -cp '" + fixtureClasses + "' WorkerFixture \"$@\"\n");
+                        + "' -cp '" + fixtureClasses + "' WorkerFixture '" + marker + "' \"$@\"\n");
         executable.toFile().setExecutable(true);
         return executable;
     }
