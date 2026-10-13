@@ -25,6 +25,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -182,24 +183,44 @@ public abstract class ElideExecTask extends DefaultTask {
             }
             byte[] captured = delegate.toByteArray();
             int outputLimit = Math.min(captured.length, MAX_CAPTURED_OUTPUT_BYTES);
+            // Compute the union of every secret occurrence over the captured bytes before emitting
+            // anything. A secret may start inside a previously matched secret's span and extend
+            // past it (two environment values that share a byte-level suffix-prefix overlap); a
+            // single forward scan that skips past a matched value would jump over that second
+            // occurrence and emit its un-overlapped tail verbatim. Marking every covered position
+            // and emitting one [redacted] marker per contiguous run closes that overlap gap.
+            boolean[] covered = new boolean[outputLimit];
+            for (RedactionValue value : redactionPolicy.values) {
+                int valueLength = value.bytes.length;
+                if (valueLength == 0) {
+                    continue;
+                }
+                for (int start = 0; start < outputLimit; start++) {
+                    if (redactionPolicy.matchesAt(captured, value, start)) {
+                        Arrays.fill(covered, start, Math.min(start + valueLength, outputLimit), true);
+                    }
+                }
+            }
             ByteArrayOutputStream redacted = new ByteArrayOutputStream(outputLimit);
             boolean renderedTruncated = false;
-            for (int offset = 0; offset < outputLimit; ) {
-                int redactionLength = redactionPolicy.matchingLength(captured, offset);
-                if (redactionLength == 0) {
+            boolean inRedactedRun = false;
+            for (int offset = 0; offset < outputLimit; offset++) {
+                if (covered[offset]) {
+                    if (!inRedactedRun) {
+                        if (redacted.size() + REDACTION_MARKER.length > MAX_CAPTURED_OUTPUT_BYTES) {
+                            renderedTruncated = true;
+                            break;
+                        }
+                        redacted.writeBytes(REDACTION_MARKER);
+                        inRedactedRun = true;
+                    }
+                } else {
+                    inRedactedRun = false;
                     if (redacted.size() == MAX_CAPTURED_OUTPUT_BYTES) {
                         renderedTruncated = true;
                         break;
                     }
                     redacted.write(captured[offset]);
-                    offset++;
-                } else {
-                    if (redacted.size() + REDACTION_MARKER.length > MAX_CAPTURED_OUTPUT_BYTES) {
-                        renderedTruncated = true;
-                        break;
-                    }
-                    redacted.writeBytes(REDACTION_MARKER);
-                    offset += redactionLength;
                 }
             }
             String output = redacted.toString(StandardCharsets.UTF_8);
@@ -247,28 +268,56 @@ public abstract class ElideExecTask extends DefaultTask {
             if (!safe) {
                 return "[redacted]";
             }
-            String redacted = untrustedValue;
-            for (RedactionValue value : values) {
-                redacted = redacted.replace(value.text, "[redacted]");
+            if (untrustedValue == null || untrustedValue.isEmpty()) {
+                return untrustedValue;
             }
-            return redacted;
-        }
-
-        private int matchingLength(byte[] captured, int offset) {
+            // Same union-of-intervals treatment as the byte scan: two values may overlap at
+            // different start offsets, in which case plain String.replace of the longest value
+            // first leaves the un-overlapped tail of the second value in the rendered path. Mask
+            // every covered character and emit one [redacted] marker per contiguous run instead.
+            int length = untrustedValue.length();
+            boolean[] covered = new boolean[length];
             for (RedactionValue value : values) {
-                int available = Math.min(value.bytes.length, captured.length - offset);
-                boolean matches = available > 0;
-                for (int index = 0; index < available; index++) {
-                    if (captured[offset + index] != value.bytes[index]) {
-                        matches = false;
-                        break;
+                int valueLength = value.text.length();
+                if (valueLength == 0) {
+                    continue;
+                }
+                for (int start = 0; start + valueLength <= length; start++) {
+                    if (untrustedValue.startsWith(value.text, start)) {
+                        Arrays.fill(covered, start, start + valueLength, true);
                     }
                 }
-                if (matches && (available == value.bytes.length || offset + available == captured.length)) {
-                    return value.bytes.length;
+            }
+            StringBuilder redacted = new StringBuilder(length);
+            boolean inRedactedRun = false;
+            for (int index = 0; index < length; index++) {
+                if (covered[index]) {
+                    if (!inRedactedRun) {
+                        redacted.append("[redacted]");
+                        inRedactedRun = true;
+                    }
+                } else {
+                    inRedactedRun = false;
+                    redacted.append(untrustedValue.charAt(index));
                 }
             }
-            return 0;
+            return redacted.toString();
+        }
+
+        private static boolean matchesAt(byte[] captured, RedactionValue value, int start) {
+            int available = Math.min(value.bytes.length, captured.length - start);
+            if (available <= 0) {
+                return false;
+            }
+            for (int index = 0; index < available; index++) {
+                if (captured[start + index] != value.bytes[index]) {
+                    return false;
+                }
+            }
+            // A full occurrence counts, as does a partial occurrence that runs to the end of the
+            // captured buffer (a value split by the capture storage bound): the storage limit is
+            // sized so the tail of such a value can still be matched and redacted.
+            return available == value.bytes.length || start + available == captured.length;
         }
     }
 

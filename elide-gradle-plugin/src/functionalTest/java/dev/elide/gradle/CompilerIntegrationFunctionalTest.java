@@ -110,6 +110,113 @@ class CompilerIntegrationFunctionalTest {
     }
 
     @Test
+    void redactsOverlappingEnvironmentValuesInCapturedOutput() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The overlapping fixture uses a POSIX fake executable.");
+        // Two values whose byte sequences overlap: A's suffix "def" is B's prefix "def". The
+        // subprocess emits the merged arrangement "abcdefsecret", in which B ("defsecret")
+        // occurs in full at offset 3, inside A's redacted span.
+        String secretA = "abcdef";
+        String secretB = "defsecret";
+        Path projectDirectory = temporaryDirectory.resolve("overlap-output-project");
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf 'abcdefsecret'
+                exit 23
+                """);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of(
+                "ELIDE_TEST_SECRET_A", secretA,
+                "ELIDE_TEST_SECRET_B", secretB))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        // Guard: redaction must be active (safe=true). If the host environment forced
+        // safe=false, output is withheld and this test cannot demonstrate the bug.
+        assertTrue(result.getOutput().contains("[redacted]"),
+                "Expected redaction to be active, but it may be withheld: " + result.getOutput());
+        // The un-overlapped tail "secret" (6 of 9 bytes of ELIDE_TEST_SECRET_B) must not leak.
+        assertFalse(result.getOutput().contains(secretB), result.getOutput());
+        assertFalse(result.getOutput().contains(secretA), result.getOutput());
+        assertFalse(result.getOutput().contains("secret"), result.getOutput());
+    }
+
+    @Test
+    void redactsOverlappingEnvironmentValuesAcrossAVulnerabilityBoundary() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The overlapping fixture uses a POSIX fake executable.");
+        // Realistic deploy-path join: a base URL ending in a registry name and a PAT issued for
+        // that same registry whose value embeds the registry name as its prefix. The failing
+        // subprocess reads the base URL and joins a derived hash to it; the hash happens to be
+        // the PAT's opaque tail, so the merged string contains the PAT in an overlapping position.
+        String repoUrl = "https://artifacts.tld/repo/path/to/binaries/v2";
+        String repoPat = "binaries/v2/AKC2aPxY98q9h0wXYZab1Cd2Ef3Gh";
+        String patTail = "AKC2aPxY98q9h0wXYZab1Cd2Ef3Gh";
+        Path projectDirectory = temporaryDirectory.resolve("overlap-deploy-project");
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                printf 'Uploading to %s/%s\\n' "$ELIDE_TEST_SECRET_URL" "${ELIDE_TEST_SECRET_PAT#binaries/v2/}"
+                exit 23
+                """);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of(
+                "ELIDE_TEST_SECRET_URL", repoUrl,
+                "ELIDE_TEST_SECRET_PAT", repoPat))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("[redacted]"),
+                "Expected redaction to be active, but it may be withheld: " + result.getOutput());
+        assertFalse(result.getOutput().contains(repoPat), result.getOutput());
+        assertFalse(result.getOutput().contains(patTail),
+                "the un-overlapped PAT tail leaked into the build log: " + result.getOutput());
+        assertFalse(result.getOutput().contains(repoUrl), result.getOutput());
+    }
+
+    @Test
+    void redactsOverlappingEnvironmentValuesInExecutableAndWorkingDirectoryPaths() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The overlapping fixture uses a POSIX fake executable.");
+        // Two equal-ish values that overlap at different start offsets within the absolute path
+        // reported in the failure message. A's suffix "Ztop" is B's prefix "Ztop"; because A is
+        // longer it sorts first under the old longest-first String.replace, which replaces A and
+        // leaves B's un-overlapped tail "band" in the rendered path. The union scan must cover
+        // both.
+        String secretA = "prefixZtop";
+        String secretB = "Ztopband";
+        Path projectDirectory = temporaryDirectory.resolve("overlap-" + secretA + secretB.substring("Ztop".length()));
+        Path executable = writeExecutable(projectDirectory, """
+                #!/bin/sh
+                exit 23
+                """);
+        writeProject(projectDirectory, executable, """
+                getEnableInstall().set(true)
+                getEnableJavaCompiler().set(false)
+                """);
+
+        BuildResult result = runner(projectDirectory, Map.of(
+                "ELIDE_TEST_SECRET_A", secretA,
+                "ELIDE_TEST_SECRET_B", secretB))
+                .withArguments("elideInstall")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("[redacted]"),
+                "Expected redaction to be active, but it may be withheld: " + result.getOutput());
+        assertTrue(result.getOutput().contains("exit code 23"), result.getOutput());
+        assertFalse(result.getOutput().contains(secretA), result.getOutput());
+        assertFalse(result.getOutput().contains(secretB), result.getOutput());
+        assertFalse(result.getOutput().contains("band"), result.getOutput());
+    }
+
+    @Test
     void redactsAnEnvironmentValueThatCrossesTheCaptureBoundary() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The boundary fixture uses a POSIX fake executable.");
