@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -124,7 +125,7 @@ class ElideRuntimeLocatorTest {
 
         ElideRuntimeSelection selection = ElideRuntimeLocator.locate(
                 PATH, Optional.empty(), List.of(executable.getParent()), () -> managed, WINDOWS,
-                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION);
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.PATH, selection.source());
         assertEquals(executable, selection.executable());
@@ -227,7 +228,7 @@ class ElideRuntimeLocatorTest {
                 () -> null,
                 candidate -> {
                     throw new AssertionError("No floor means no probe");
-                }, IGNORE_REJECTION);
+                }, IGNORE_REJECTION, IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.PATH, selection.source());
         assertEquals(pathBin, selection.executable());
@@ -244,7 +245,7 @@ class ElideRuntimeLocatorTest {
                 () -> {
                     throw new AssertionError("The floor must not be resolved without a candidate");
                 },
-                reporting(CURRENT), IGNORE_REJECTION);
+                reporting(CURRENT), IGNORE_REJECTION, IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.MANAGED, selection.source());
     }
@@ -259,9 +260,139 @@ class ElideRuntimeLocatorTest {
                 () -> {
                     throw new AssertionError("MANAGED must not resolve a PATH floor");
                 },
-                reporting(CURRENT), IGNORE_REJECTION);
+                reporting(CURRENT), IGNORE_REJECTION, IGNORE_REJECTION);
 
         assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+    }
+
+    @Test
+    void anUnusableExplicitExecutableIsReportedAndFallsBackToPath() throws IOException {
+        var missing = tempDir.resolve("explicit").resolve("missing");
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+        var rejections = new ArrayList<String>();
+
+        var selection = ElideRuntimeLocator.locate(
+                AUTO, Optional.of(missing), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add);
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(pathBin, selection.executable());
+        assertEquals(1, rejections.size());
+        var message = rejections.get(0);
+        assertTrue(message.contains(missing.toString()), message);
+        assertTrue(message.contains("does not exist"), message);
+        assertTrue(message.contains("falling back"), message);
+    }
+
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void anExplicitExecutableLackingTheExecuteBitIsReportedAndFallsBackToManaged() throws IOException {
+        var nonExec = tempDir.resolve("explicit").resolve("elide");
+        Files.createDirectories(nonExec.getParent());
+        Files.writeString(nonExec, "runtime");
+        Files.setPosixFilePermissions(nonExec, PosixFilePermissions.fromString("rw-r--r--"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+        var rejections = new ArrayList<String>();
+
+        var selection = ElideRuntimeLocator.locate(
+                AUTO, Optional.of(nonExec), List.of(), () -> managed, LINUX,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add);
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+        assertEquals(managed, selection.executable());
+        assertEquals(1, rejections.size());
+        var message = rejections.get(0);
+        assertTrue(message.contains(nonExec.toString()), message);
+        assertTrue(message.contains("is not executable"), message);
+        assertFalse(message.contains("does not exist"), message);
+    }
+
+    @Test
+    void anExplicitPathThatIsADirectoryIsReportedAsNotARegularFile() throws IOException {
+        var directory = tempDir.resolve("explicit-dir");
+        Files.createDirectories(directory);
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+        var rejections = new ArrayList<String>();
+
+        var selection = ElideRuntimeLocator.locate(
+                AUTO, Optional.of(directory), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add);
+
+        assertEquals(ElideRuntimeSource.PATH, selection.source());
+        assertEquals(pathBin, selection.executable());
+        assertEquals(1, rejections.size());
+        var message = rejections.get(0);
+        assertTrue(message.contains(directory.toString()), message);
+        assertTrue(message.contains("is not a regular file"), message);
+    }
+
+    @Test
+    void noExplicitRejectionIsReportedWhenNoExplicitIsConfigured() throws IOException {
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+        var rejections = new ArrayList<String>();
+
+        ElideRuntimeLocator.locate(
+                AUTO, Optional.empty(), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add);
+
+        assertTrue(rejections.isEmpty());
+    }
+
+    @Test
+    void noExplicitRejectionIsReportedInManagedModeEvenWhenTheExplicitIsUnusable() throws IOException {
+        var missing = tempDir.resolve("explicit").resolve("missing");
+        var pathBin = executable(tempDir.resolve("path").resolve("elide"));
+        var managed = tempDir.resolve("managed").resolve("elide");
+        var rejections = new ArrayList<String>();
+
+        var selection = ElideRuntimeLocator.locate(
+                MANAGED, Optional.of(missing), List.of(pathBin.getParent()), () -> managed, LINUX,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add);
+
+        assertEquals(ElideRuntimeSource.MANAGED, selection.source());
+        assertTrue(rejections.isEmpty());
+    }
+
+    @Test
+    void pathModeReportsTheUnusableExplicitBeforeFailingOnNoCandidate() throws IOException {
+        var missing = tempDir.resolve("explicit").resolve("missing");
+        var emptyBin = tempDir.resolve("empty");
+        Files.createDirectories(emptyBin);
+        var managed = tempDir.resolve("managed").resolve("elide");
+        var rejections = new ArrayList<String>();
+
+        var failure = assertThrows(IllegalStateException.class,
+                () -> ElideRuntimeLocator.locate(
+                        PATH, Optional.of(missing), List.of(emptyBin), () -> managed, LINUX,
+                        () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add));
+
+        assertTrue(failure.getMessage().contains("no executable was found"), failure.getMessage());
+        assertEquals(1, rejections.size());
+        assertTrue(rejections.get(0).contains(missing.toString()), rejections.get(0));
+        assertTrue(rejections.get(0).contains("does not exist"), rejections.get(0));
+    }
+
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void windowsAcceptsAnExplicitRegularExeWithoutTheUnixExecutableBit() throws IOException {
+        var explicit = tempDir.resolve("explicit").resolve("elide.exe");
+        Files.createDirectories(explicit.getParent());
+        Files.writeString(explicit, "runtime");
+        Files.setPosixFilePermissions(explicit, PosixFilePermissions.fromString("rw-r--r--"));
+        assertFalse(Files.isExecutable(explicit));
+        var managed = tempDir.resolve("managed").resolve("elide.exe");
+        var rejections = new ArrayList<String>();
+
+        var selection = ElideRuntimeLocator.locate(
+                AUTO, Optional.of(explicit), List.of(), () -> managed, WINDOWS,
+                () -> REQUIRED, reporting(CURRENT), IGNORE_REJECTION, rejections::add);
+
+        assertEquals(ElideRuntimeSource.EXPLICIT, selection.source());
+        assertEquals(explicit, selection.executable());
+        assertTrue(rejections.isEmpty());
     }
 
     private ElideRuntimeSelection locate(ElideRuntimeMode mode, Optional<Path> explicit,
@@ -274,7 +405,7 @@ class ElideRuntimeLocatorTest {
                                          ElideVersionProbe probe) {
         return ElideRuntimeLocator.locate(
                 mode, explicit, pathDirectories, () -> managed, LINUX, () -> REQUIRED, probe,
-                IGNORE_REJECTION);
+                IGNORE_REJECTION, IGNORE_REJECTION);
     }
 
     /** Every candidate reports the same version. */

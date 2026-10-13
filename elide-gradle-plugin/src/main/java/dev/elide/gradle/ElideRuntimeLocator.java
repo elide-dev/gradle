@@ -32,6 +32,10 @@ final class ElideRuntimeLocator {
      *                          is a callback rather than a log call because selection is re-run on
      *                          every read of the provider that wraps it, so the caller has to be
      *                          the one that decides a given rejection is only worth saying once.
+     * @param onExplicitRejected reports an explicit executable that was set but is not usable.
+     *                          It is a callback for the same reason as {@code onCandidateRejected}:
+     *                          selection is re-evaluated on every read of the wrapping provider,
+     *                          so the caller decides a given rejection is only worth saying once.
      */
     static ElideRuntimeSelection locate(
             ElideRuntimeMode mode,
@@ -41,14 +45,25 @@ final class ElideRuntimeLocator {
             ElidePlatform platform,
             Supplier<ElideVersion> requiredVersion,
             ElideVersionProbe versionProbe,
-            Consumer<String> onCandidateRejected) {
+            Consumer<String> onCandidateRejected,
+            Consumer<String> onExplicitRejected) {
         if (mode == ElideRuntimeMode.MANAGED) {
             return new ElideRuntimeSelection(ElideRuntimeSource.MANAGED, managedExecutable.get());
         }
 
-        Optional<Path> explicitExecutable = explicit.filter(path -> usable(path, platform));
-        if (explicitExecutable.isPresent()) {
-            return new ElideRuntimeSelection(ElideRuntimeSource.EXPLICIT, explicitExecutable.get());
+        if (explicit.isPresent()) {
+            Path explicitPath = explicit.get();
+            if (usable(explicitPath, platform)) {
+                return new ElideRuntimeSelection(ElideRuntimeSource.EXPLICIT, explicitPath);
+            }
+            // An explicit path that fails usable() is distinguished from "no explicit configured":
+            // the user asked for this specific executable, so silently substituting another runtime
+            // would hide a typo or a permissions mistake behind an unexplained PATH or managed
+            // runtime. Report it so the user knows their setting was ignored.
+            onExplicitRejected.accept(
+                    "Explicit Elide executable at " + explicitPath
+                            + " " + rejectionReason(explicitPath, platform)
+                            + "; falling back to PATH or managed runtime.");
         }
 
         List<Path> candidates = new ArrayList<>();
@@ -96,6 +111,25 @@ final class ElideRuntimeLocator {
 
     private static String describe(ElideVersion version) {
         return version == null ? "an unreadable version" : version.toString();
+    }
+
+    /**
+     * Explains why an explicit path failed {@link #usable(Path, ElidePlatform)}. The reasons mirror
+     * the terms of {@code usable()} so the message points at the actual defect rather than a
+     * generic one: a missing file is a typo a user can fix, a non-executable file is a permissions
+     * problem, and a non-regular file (a directory, a broken link) is neither.
+     */
+    private static String rejectionReason(Path path, ElidePlatform platform) {
+        if (!Files.exists(path)) {
+            return "does not exist";
+        }
+        if (!Files.isRegularFile(path)) {
+            return "is not a regular file";
+        }
+        if (!platform.os().equals("windows") && !Files.isExecutable(path)) {
+            return "is not executable";
+        }
+        return "is not usable";
     }
 
     private static boolean usable(Path path, ElidePlatform platform) {

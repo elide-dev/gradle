@@ -110,6 +110,35 @@ class RuntimeSelectionFunctionalTest {
     }
 
     @Test
+    void anUnusableExplicitElideBinIsReportedAndFallsBackToTheManagedRuntime() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("unusable-explicit");
+        Path emptyPath = projectDirectory.resolve("empty-path");
+        Files.createDirectories(emptyPath);
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                    id 'java'
+                }
+                elide {
+                    elideBin = layout.projectDirectory.file('bin/elide-that-does-not-exist')
+                    runtime { mode = dev.elide.gradle.ElideRuntimeMode.AUTO }
+                }
+                """);
+
+        // The explicit path does not exist, so selection must not drop it silently: it warns and
+        // falls back, then the offline managed cache-miss names the substitution it performed.
+        BuildResult result = configuredRunner(projectDirectory, environmentWithPath(emptyPath))
+                .withArguments("compileJava", "--offline")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("Explicit Elide executable at"), result.getOutput());
+        assertTrue(result.getOutput().contains("does not exist"), result.getOutput());
+        assertTrue(result.getOutput().contains("falling back"), result.getOutput());
+        assertTrue(result.getOutput().contains("is not cached at"), result.getOutput());
+    }
+
+    @Test
     void autoModeAcceptsARuntimeNewerThanTheConfiguredVersionWithoutProvisioning() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The version-reporting fixture is a POSIX shell script.");
