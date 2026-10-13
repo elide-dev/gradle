@@ -252,3 +252,9 @@ Changes to the Elide manifest require another preparation invocation. The defaul
 resolution so a fresh checkout works in one command.
 
 See [integration testing](docs/testing.md) for the required native CI suite, coverage boundaries, and benchmark follow-up.
+
+### Releasing
+
+Set `version` in `gradle.properties`, move the `CHANGELOG.md` **Unreleased** entries under that version, merge, and
+push a tag named after the version (`1.1.0`). The `Release` workflow creates the GitHub release and publishes both
+plugins to the Gradle Plugin Portal, which needs the `GRADLE_PUBLISH_KEY` and `GRADLE_PUBLISH_SECRET` secrets.

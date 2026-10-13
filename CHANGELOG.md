@@ -3,10 +3,12 @@
 All notable changes to the Elide Gradle Plugin are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project does not currently assign
-semantic versions to unreleased changes, so work completed after `1.0.0` remains under **Unreleased** until the next
+semantic versions to unreleased changes, so work completed after a release remains under **Unreleased** until the next
 release is cut.
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-10-12
 
 ### Added
 
@@ -178,6 +180,7 @@ release is cut.
 - Added the first plugin extension, functional test, unit-test scaffold, Gradle wrappers, and local/remote example projects.
 - Added the remote `elide.gradle.kts` bootstrap script.
 
-[Unreleased]: https://github.com/elide-dev/gradle/compare/1.0.0...HEAD
+[Unreleased]: https://github.com/elide-dev/gradle/compare/1.1.0...HEAD
+[1.1.0]: https://github.com/elide-dev/gradle/compare/1.0.0...1.1.0
 [1.0.0]: https://github.com/elide-dev/gradle/compare/1.0.0-beta5...1.0.0
 [1.0.0-beta5]: https://github.com/elide-dev/gradle/releases/tag/1.0.0-beta5
