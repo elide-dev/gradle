@@ -47,7 +47,8 @@ public final class ElideRuntimeResolver {
                     platform,
                     () -> requiredRuntimeVersion(extension, mode, buildConfiguration),
                     versionProbe,
-                    rejectionReporter(buildConfiguration));
+                    rejectionReporter(buildConfiguration),
+                    explicitRejectionReporter(buildConfiguration));
         });
         Provider<RegularFile> executable = project.getLayout().file(
                 selection.map(selected -> selected.executable().toFile()));
@@ -141,6 +142,16 @@ public final class ElideRuntimeResolver {
                 LOGGER.lifecycle(message);
             }
         };
+    }
+
+    /**
+     * Reports an explicit {@code elideBin}/{@code runtime.executable} that was set but is not
+     * usable, once per build. Unlike a skipped PATH candidate this is a configuration the user
+     * supplied being ignored, so it warrants {@link Logger#warn(String) warn} rather than
+     * {@code lifecycle}; the once-per-build guard is the same.
+     */
+    private static Consumer<String> explicitRejectionReporter(Provider<ElideBuildConfiguration> buildConfiguration) {
+        return message -> warnOnce(buildConfiguration, message);
     }
 
     /**
