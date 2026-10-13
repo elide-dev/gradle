@@ -6,6 +6,7 @@ import org.gradle.api.provider.ListProperty;
 import org.gradle.api.tasks.*;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.*;
 import java.util.*;
@@ -62,6 +63,7 @@ public abstract class ElideDependencyReportTask extends DefaultTask {
         Collections.sort(lines.subList(1, lines.size()));
         Path report = getReportFile().get().getAsFile().toPath();
         Files.createDirectories(report.getParent());
-        Files.write(report, lines);
+        String content = String.join("\n", lines) + "\n";
+        Files.write(report, content.getBytes(StandardCharsets.UTF_8));
     }
 }

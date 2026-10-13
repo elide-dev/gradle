@@ -116,6 +116,9 @@ release is cut.
 - Fixed the real-runtime smoke test so it exercises the production managed resolver, checksum, extraction, dependency
   installation, Java compilation, and application execution paths.
 - Fixed the version catalog plugin alias so it resolves `dev.elide` version `1.0.0` rather than the Elide runtime version.
+- Fixed the exported dependency report so it uses LF line endings on every operating system; the report previously
+  embedded `System.lineSeparator()`, so Windows builds emitted `\r\n` and the same dependencies produced different bytes
+  across operating systems, undermining the report's portable, cacheable output contract.
 
 ### Removed
 
