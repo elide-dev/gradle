@@ -153,6 +153,110 @@ class GradleDependencyFunctionalTest {
         assertTrue(Files.exists(directory.resolve("build/classes/java/main/Example.class")));
     }
 
+    @Test
+    @org.junit.jupiter.api.condition.DisabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
+    void persistentGradleWorkerSuppressesAmbientClasspath() throws Exception {
+        Path marker = directory.resolve("classpath-marker.txt");
+        Path executable = writePersistentWorkerFixture(marker);
+        Files.writeString(
+                directory.resolve("settings.gradle"), "rootProject.name='persistent-classpath-gradle'\n");
+        Files.writeString(
+                directory.resolve("build.gradle"),
+                """
+                plugins { id 'java'; id 'dev.elide' }
+                elide {
+                  persistentCompiler.set(true)
+                  dependencyMode.set(dev.elide.gradle.ElideDependencyMode.GRADLE)
+                  runtime { mode = dev.elide.gradle.ElideRuntimeMode.PATH; executable = layout.projectDirectory.file('elide') }
+                }
+                """);
+        Path source = directory.resolve("src/main/java/Example.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, "public class Example {}\n");
+        var environment = new java.util.HashMap<>(System.getenv());
+        environment.put("CLASSPATH", "/ambient-gradle-mode-classpath");
+        environment.put("ELIDE_FIXTURE_CLASSPATH_MARKER", marker.toString());
+        run("compileJava").withEnvironment(environment).build();
+        assertEquals(
+                "<unset>",
+                Files.readString(marker).trim(),
+                "Gradle dependency mode must suppress the ambient CLASSPATH for the persistent worker");
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.DisabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
+    void persistentWorkerInheritsAmbientClasspathInLegacyMode() throws Exception {
+        Path marker = directory.resolve("classpath-marker.txt");
+        Path executable = writePersistentWorkerFixture(marker);
+        Files.writeString(
+                directory.resolve("settings.gradle"), "rootProject.name='persistent-classpath-legacy'\n");
+        Files.writeString(
+                directory.resolve("build.gradle"),
+                """
+                plugins { id 'java'; id 'dev.elide' }
+                elide {
+                  persistentCompiler.set(true)
+                  dependencyMode.set(dev.elide.gradle.ElideDependencyMode.LEGACY)
+                  runtime { mode = dev.elide.gradle.ElideRuntimeMode.PATH; executable = layout.projectDirectory.file('elide') }
+                }
+                """);
+        Path source = directory.resolve("src/main/java/Example.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, "public class Example {}\n");
+        var environment = new java.util.HashMap<>(System.getenv());
+        environment.put("CLASSPATH", "/ambient-legacy-mode-classpath");
+        environment.put("ELIDE_FIXTURE_CLASSPATH_MARKER", marker.toString());
+        run("compileJava").withEnvironment(environment).build();
+        assertEquals(
+                "/ambient-legacy-mode-classpath",
+                Files.readString(marker).trim(),
+                "Legacy dependency mode must not suppress the ambient CLASSPATH for the worker");
+        assertTrue(Files.exists(executable));
+    }
+
+    /**
+     * Writes a fake Elide executable that speaks the Bazel worker protocol and records the inherited
+     * {@code CLASSPATH} env var to {@code marker} so a persistent-compiler functional test can
+     * observe whether the worker suppressed it. The fixture's own classpath is supplied via
+     * {@code -cp}, so the CLASSPATH env var never affects its launch — only its report.
+     */
+    private Path writePersistentWorkerFixture(Path marker) throws Exception {
+        Path fixtureClasses = directory.resolve("worker-fixture-classes");
+        Files.createDirectories(fixtureClasses);
+        Path workerSource = directory.resolve("WorkerFixture.java");
+        Files.writeString(
+                workerSource,
+                "import java.nio.file.*;\n"
+                        + "public final class WorkerFixture {\n"
+                        + "  public static void main(String[] args) throws Exception {\n"
+                        + "    Path marker = Path.of(System.getenv(\"ELIDE_FIXTURE_CLASSPATH_MARKER\"));\n"
+                        + "    String classpath = System.getenv(\"CLASSPATH\");\n"
+                        + "    Files.createDirectories(marker.getParent());\n"
+                        + "    Files.writeString(marker, classpath == null ? \"<unset>\" : classpath);\n"
+                        + "    for (int id = 1; ; id++) {\n"
+                        + "      int length = System.in.read();\n"
+                        + "      if (length == -1) return;\n"
+                        + "      byte[] request = System.in.readNBytes(length);\n"
+                        + "      if (request.length != length || request[request.length - 1] != id) System.exit(9);\n"
+                        + "      System.out.write(new byte[] {4, 8, 0, 24, (byte) id});\n"
+                        + "      System.out.flush();\n"
+                        + "    }\n"
+                        + "  }\n"
+                        + "}\n");
+        assertEquals(
+                0,
+                javax.tools.ToolProvider.getSystemJavaCompiler()
+                        .run(null, null, null, "-d", fixtureClasses.toString(), workerSource.toString()));
+        Path executable = directory.resolve("elide");
+        Files.writeString(
+                executable,
+                "#!/bin/sh\nshift\nexec '"
+                        + Path.of(System.getProperty("java.home"), "bin", "java")
+                        + "' -cp '" + fixtureClasses + "' WorkerFixture \"$@\"\n");
+        executable.toFile().setExecutable(true);
+        return executable;
+    }
+
     private void module(String name, String version, String dependencies) throws Exception {
         Path folder = directory.resolve("repo/fixture/" + name + "/" + version);
         Files.createDirectories(folder);

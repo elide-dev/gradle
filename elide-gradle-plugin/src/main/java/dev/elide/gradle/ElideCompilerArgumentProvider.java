@@ -49,7 +49,9 @@ public abstract class ElideCompilerArgumentProvider implements CommandLineArgume
             arguments.add(getCompilerService().get().endpoint());
             // Keep large classpaths inside the service instead of on the OS command line.
             arguments.add("request=" + getCompilerService().get().registerCompiler(
-                    getElideExecutable().get().getAsFile().getAbsolutePath(), getWorkerClasspath().getFiles()));
+                    getElideExecutable().get().getAsFile().getAbsolutePath(),
+                    getWorkerClasspath().getFiles(),
+                    getDependencyMode().get()));
         }
         arguments.add(getElideExecutable().get().getAsFile().getAbsolutePath());
         arguments.add("javac");
