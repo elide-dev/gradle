@@ -128,10 +128,6 @@ class ElideCompilerServiceTest {
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
             DataInputStream in = new DataInputStream(socket.getInputStream());
             out.writeUTF("definitely-not-the-token");
-            out.writeUTF("/any/executable");
-            out.writeUTF(Files.createTempDirectory("cwd").toString());
-            out.writeUTF("any-prepared-id");
-            out.writeInt(0);
             out.flush();
             assertThrows(EOFException.class, in::readInt);
         } finally {
