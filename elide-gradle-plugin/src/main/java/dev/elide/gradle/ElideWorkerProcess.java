@@ -51,6 +51,9 @@ final class ElideWorkerProcess implements AutoCloseable {
 
     synchronized ElideWorkerProtocol.Response compile(
             List<String> arguments, Map<String, byte[]> inputs) throws IOException {
+        synchronized (errorOutput) {
+            errorOutput.reset();
+        }
         int id = ++sequence;
         Future<ElideWorkerProtocol.Response> response =
                 reader.submit(
