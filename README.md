@@ -6,12 +6,19 @@ selection is explicit, reproducible, and safe to use with the configuration cach
 ### Installation
 
 Apply the settings plugin once and select the Elide runtime for the build. The settings plugin release and Elide runtime
-version are independent coordinates.
+version are independent coordinates. The plugins are published to Maven Central, so add it to the plugin repositories.
 
 **`settings.gradle.kts`**
 
 ```kotlin
 import dev.elide.gradle.ElideRuntimeMode
+
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
 
 plugins {
     id("dev.elide.settings") version "1.1.0"
@@ -257,4 +264,6 @@ See [integration testing](docs/testing.md) for the required native CI suite, cov
 
 Set `version` in `gradle.properties`, move the `CHANGELOG.md` **Unreleased** entries under that version, merge, and
 push a tag named after the version (`1.1.0`). The `Release` workflow creates the GitHub release and publishes both
-plugins to the Gradle Plugin Portal, which needs the `GRADLE_PUBLISH_KEY` and `GRADLE_PUBLISH_SECRET` secrets.
+plugins and the catalog to Maven Central, which needs the `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD` (Central
+Portal user token) and `GPG_SIGNING_KEY` (base64-encoded signing key) secrets, plus `GPG_SIGNING_PASSPHRASE` when the key
+has one.
