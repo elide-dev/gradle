@@ -200,6 +200,53 @@ class RealNativeIntegrationFunctionalTest {
     }
 
     @Test
+    @org.junit.jupiter.api.condition.DisabledOnOs(org.junit.jupiter.api.condition.OS.WINDOWS)
+    void persistentGradleWorkerDoesNotLeakAmbientClasspathToCompilation() throws Exception {
+        String runtime = System.getenv("ELIDE_INTEGRATION_EXECUTABLE");
+        assertNotNull(runtime, "Real Elide is required");
+        Path ambient = directory.resolve("ambient");
+        Files.createDirectories(ambient);
+        Path undeclared = directory.resolve("Undeclared.java");
+        Files.writeString(undeclared, "public class Undeclared {}\n");
+        assertEquals(
+                0,
+                javax.tools.ToolProvider.getSystemJavaCompiler()
+                        .run(null, null, null, "-d", ambient.toString(), undeclared.toString()));
+        Files.writeString(
+                directory.resolve("settings.gradle"),
+                "rootProject.name='persistent-ambient-classpath'\n");
+        Path build = directory.resolve("build.gradle");
+        Files.writeString(
+                build,
+                """
+                plugins { id 'java'; id 'dev.elide' }
+                elide {
+                  persistentCompiler.set(true)
+                  dependencyMode.set(dev.elide.gradle.ElideDependencyMode.GRADLE)
+                  runtime { mode = dev.elide.gradle.ElideRuntimeMode.PATH; executable = layout.projectDirectory.file('%s') }
+                }
+                """
+                        .formatted(runtime.replace("\\", "/").replace("'", "\\'")));
+        Path source = directory.resolve("src/main/java/Example.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, "public class Example extends Undeclared {}\n");
+        var environment = new java.util.HashMap<>(System.getenv());
+        environment.put("CLASSPATH", ambient.toString());
+        var result = run("compileJava").withEnvironment(environment).buildAndFail();
+        assertTrue(
+                result.getOutput().contains("cannot find symbol"),
+                "Ambient CLASSPATH must not leak undeclared classes to the persistent worker\n"
+                        + result.getOutput());
+        Files.writeString(
+                build,
+                "\ndependencies { implementation files('ambient') }\n",
+                StandardOpenOption.APPEND);
+        var compiled = run("compileJava").withEnvironment(environment).build();
+        assertEquals(TaskOutcome.SUCCESS, compiled.task(":compileJava").getOutcome());
+        assertTrue(Files.exists(directory.resolve("build/classes/java/main/Example.class")));
+    }
+
+    @Test
     void failedCompilationDoesNotPoisonTheSharedWorker() throws Exception {
         String runtime = System.getenv("ELIDE_INTEGRATION_EXECUTABLE");
         assertNotNull(runtime, "Real Elide is required");

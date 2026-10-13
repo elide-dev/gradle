@@ -39,13 +39,13 @@ public abstract class ElideCompilerService
     private ServerSocket server;
     private final Set<Socket> connections = ConcurrentHashMap.newKeySet();
 
-    private record Prepared(String executable, List<File> classpath) {}
+    private record Prepared(String executable, List<File> classpath, ElideDependencyMode mode) {}
 
     private final Map<String, Prepared> prepared = new ConcurrentHashMap<>();
 
-    public String registerCompiler(String executable, Collection<File> classpath) {
+    public String registerCompiler(String executable, Collection<File> classpath, ElideDependencyMode mode) {
         String id = UUID.randomUUID().toString();
-        prepared.put(id, new Prepared(executable, List.copyOf(classpath)));
+        prepared.put(id, new Prepared(executable, List.copyOf(classpath), mode));
         return id;
     }
 
@@ -107,7 +107,7 @@ public abstract class ElideCompilerService
             ElideWorkerProtocol.Response response;
             try {
                 Map<String, byte[]> inputs = digests(request.classpath());
-                Entry entry = acquire(executable, cwd);
+                Entry entry = acquire(executable, cwd, request.mode());
                 try {
                     response = entry.process.compile(arguments, inputs);
                 } finally {
@@ -151,9 +151,12 @@ public abstract class ElideCompilerService
         return digests;
     }
 
-    private synchronized Entry acquire(String executable, Path cwd) throws IOException {
+    private synchronized Entry acquire(String executable, Path cwd, ElideDependencyMode mode) throws IOException {
         if (closed) throw new IOException("Elide compiler service is closed");
-        String key = executable + "\n" + cwd;
+        // The dependency mode changes the worker's launch environment (Gradle mode suppresses the
+        // ambient CLASSPATH), so it must be part of the pool key or a mode switch within a build
+        // could reuse a worker started under the other mode.
+        String key = executable + "\n" + cwd + "\n" + mode;
         for (Entry entry : workers) {
             if (!entry.busy && entry.key.equals(key) && entry.process.isAlive()) {
                 entry.busy = true;
@@ -170,7 +173,7 @@ public abstract class ElideCompilerService
             idle.process.close();
             workers.remove(idle);
         }
-        Entry entry = new Entry(key, new ElideWorkerProcess(executable, cwd));
+        Entry entry = new Entry(key, new ElideWorkerProcess(executable, cwd, mode == ElideDependencyMode.GRADLE));
         entry.busy = true;
         workers.add(entry);
         return entry;

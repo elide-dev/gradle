@@ -77,6 +77,14 @@ tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }
 
+// ElideWorkerProcessTest asserts the persistent worker suppresses the ambient CLASSPATH env var in
+// Gradle dependency mode and inherits it otherwise. Seed a known ambient value on the forked test
+// JVM so both branches are observable. The test JVM is launched with an explicit -cp, so the
+// CLASSPATH env var never affects its own classpath; it is only visible via System.getenv.
+tasks.named<Test>("test") {
+    environment("CLASSPATH", "/elide-worker-test-ambient-classpath")
+}
+
 dependencyLocking {
     lockAllConfigurations()
 }

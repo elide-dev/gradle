@@ -19,12 +19,20 @@ final class ElideWorkerProcess implements AutoCloseable {
     private int sequence;
     private final ByteArrayOutputStream errorOutput = new ByteArrayOutputStream();
 
-    ElideWorkerProcess(String executable, Path directory) throws IOException {
-        this(List.of(executable, "javac", "--persistent_worker", "--classpath-cache"), directory);
+    ElideWorkerProcess(String executable, Path directory, boolean suppressAmbientClasspath)
+            throws IOException {
+        this(List.of(executable, "javac", "--persistent_worker", "--classpath-cache"),
+                directory, suppressAmbientClasspath);
     }
 
-    ElideWorkerProcess(List<String> command, Path directory) throws IOException {
-        process = new ProcessBuilder(command).directory(directory.toFile()).start();
+    ElideWorkerProcess(List<String> command, Path directory, boolean suppressAmbientClasspath)
+            throws IOException {
+        // In Gradle dependency mode Gradle is the sole source of the compiler classpath, so the
+        // ambient CLASSPATH env var must not reach the native worker (matching the one-shot path's
+        // builder.environment().remove("CLASSPATH") in ElideJavaCompilerLauncher).
+        ProcessBuilder builder = new ProcessBuilder(command).directory(directory.toFile());
+        if (suppressAmbientClasspath) builder.environment().remove("CLASSPATH");
+        process = builder.start();
         org.gradle.api.logging.Logging.getLogger(ElideWorkerProcess.class)
                 .info("Started Elide compiler worker (pid {})", process.pid());
         Thread errors =
