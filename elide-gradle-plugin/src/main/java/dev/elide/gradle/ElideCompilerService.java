@@ -90,22 +90,22 @@ public abstract class ElideCompilerService
             String executable = in.readUTF();
             Path cwd = Path.of(in.readUTF());
             Prepared request = prepared.remove(in.readUTF());
-            if (request == null || !request.executable().equals(executable))
-                throw new IOException("Unknown compiler request");
-            int count = in.readInt();
-            if (count < 0 || count > 100_000)
-                throw new IOException("Invalid compiler argument count");
-            List<String> arguments = new ArrayList<>();
-            long argumentBytes = 0;
-            for (int i = 0; i < count; i++) {
-                String argument = in.readUTF();
-                argumentBytes += argument.length() * 3L;
-                if (argumentBytes > ElideWorkerProtocol.MAX_FRAME)
-                    throw new IOException("Compiler arguments exceed 64 MiB");
-                arguments.add(argument);
-            }
             ElideWorkerProtocol.Response response;
             try {
+                if (request == null || !request.executable().equals(executable))
+                    throw new IOException("Unknown compiler request");
+                int count = in.readInt();
+                if (count < 0 || count > 100_000)
+                    throw new IOException("Invalid compiler argument count");
+                List<String> arguments = new ArrayList<>();
+                long argumentBytes = 0;
+                for (int i = 0; i < count; i++) {
+                    String argument = in.readUTF();
+                    argumentBytes += argument.length() * 3L;
+                    if (argumentBytes > ElideWorkerProtocol.MAX_FRAME)
+                        throw new IOException("Compiler arguments exceed 64 MiB");
+                    arguments.add(argument);
+                }
                 Map<String, byte[]> inputs = digests(request.classpath());
                 Entry entry = acquire(executable, cwd);
                 try {
