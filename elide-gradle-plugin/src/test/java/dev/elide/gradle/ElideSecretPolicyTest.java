@@ -55,6 +55,13 @@ class ElideSecretPolicyTest {
             // anonymous short values colliding with output, not to excuse a declared credential.
             "ORG_GRADLE_PROJECT_signingPassword|abcde",
             "MY_TOKEN|abc",
+            // Credential conventions named by a whole suffix segment rather than by the word
+            // 'password', 'token' or 'secret'. These are widespread in CI environments the
+            // plugin inherits wholesale, and whole-segment matching catches them without
+            // matching the innocent words that merely contain the same letters (see below).
+            "DOCKER_PASS|hunter2reggistry",
+            "SONAR_LOGIN|a9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0",
+            "GITHUB_OAUTH|e3b0c44298fc1c149afbf4c8996fb92427ae41e46",
             // A name that says outright it holds a credential outranks a value that merely
             // looks like a mode: these are whatever the variable is actually holding.
             "MY_PASSWORD|none",
@@ -86,6 +93,11 @@ class ElideSecretPolicyTest {
             "KEYBOARD_LAYOUT|us-intl",
             "MONKEY_PATCH_MODE|enabled",
             "KEYMAP_PATH|/usr/share/keymaps",
+            // Words that merely contain PASS, LOGIN or OAUTH as a substring but not as a whole
+            // segment: whole-segment matching is what keeps these out of it.
+            "COMPASS|some-bearing-value",
+            "OAUTHOR|writer",
+            "LOGINS|recorded-count",
             // Everyday variables whose values appear verbatim in compiler output.
             "PWD|/home/datafox/project",
             "USER|datafox",

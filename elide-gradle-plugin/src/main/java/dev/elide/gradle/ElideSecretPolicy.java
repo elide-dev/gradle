@@ -87,7 +87,8 @@ final class ElideSecretPolicy {
      */
     private static final Set<String> SENSITIVE_SEGMENTS = Set.of(
             "KEY", "KEYS", "AUTH", "SESSION", "COOKIE", "SIGNATURE", "CERT",
-            "PRIVATE", "SALT", "NONCE", "PAT", "DSN", "SID", "BEARER");
+            "PRIVATE", "SALT", "NONCE", "PAT", "DSN", "SID", "BEARER",
+            "PASS", "LOGIN", "OAUTH");
 
     /**
      * Names that match a sensitive segment but are known not to carry a credential. Kept short on
