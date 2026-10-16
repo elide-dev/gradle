@@ -151,6 +151,51 @@ class SettingsPluginFunctionalTest {
     }
 
     @Test
+    void managedRuntimeRejectsADynamicVersionFromCatalog() throws IOException {
+        Path projectDirectory = temporaryDirectory.resolve("catalog-dynamic-version");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                elide = "1.5.+"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins {
+                    id("dev.elide.settings")
+                }
+
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.MANAGED
+                        versionFrom("libs", "elide")
+                    }
+                }
+
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins {
+                    id("dev.elide")
+                }
+
+                elide { compiler = false }
+
+                tasks.register("verifyManagedRuntime") {
+                    dependsOn("prepareElideRuntime")
+                }
+                """);
+
+        BuildResult result = configuredRunner(projectDirectory)
+                .withArguments(":app:prepareElideRuntime", "--stacktrace")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("concrete version"), result.getOutput());
+        assertTrue(result.getOutput().contains("1.5.+"), result.getOutput());
+    }
+
+    @Test
     void missingVersionCatalogReportsRequestedCatalogAndProject() throws IOException {
         Path projectDirectory = temporaryDirectory.resolve("missing-catalog");
         Files.createDirectories(projectDirectory.resolve("app"));

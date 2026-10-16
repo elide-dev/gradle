@@ -332,6 +332,38 @@ class ManagedRuntimeFunctionalTest {
     }
 
     @Test
+    void rejectsADynamicVersionWithAnActionableMessageAndLeavesNoCacheDirectory() throws IOException {
+        rejectsDynamicVersionWithActionableMessage("1.5.+");
+    }
+
+    @Test
+    void rejectsARangeVersionWithAnActionableMessageAndLeavesNoCacheDirectory() throws IOException {
+        rejectsDynamicVersionWithActionableMessage("[1.5,2.0)");
+    }
+
+    @Test
+    void rejectsLatestReleaseWithAnActionableMessageAndLeavesNoCacheDirectory() throws IOException {
+        rejectsDynamicVersionWithActionableMessage("latest.release");
+    }
+
+    private void rejectsDynamicVersionWithActionableMessage(String dynamicVersion) throws IOException {
+        FixturePlatform platform = currentPlatform();
+        Path projectDirectory = temporaryDirectory.resolve("dynamic-version-" + dynamicVersion.hashCode());
+        Path gradleUserHome = temporaryDirectory.resolve("dynamic-version-home-" + dynamicVersion.hashCode());
+        writeProjectWithVersion(projectDirectory, dynamicVersion);
+
+        BuildResult result = runner(projectDirectory, gradleUserHome)
+                .withArguments("--gradle-user-home", gradleUserHome.toString(),
+                        "verifyManagedRuntime", "-Ddev.elide.gradle.test.releaseBaseUri=http://127.0.0.1:1/releases")
+                .buildAndFail();
+
+        assertTrue(result.getOutput().contains("concrete version"), result.getOutput());
+        assertTrue(result.getOutput().contains(dynamicVersion), result.getOutput());
+        assertFalse(Files.exists(gradleUserHome.resolve("caches/dev.elide/runtimes").resolve(dynamicVersion)),
+                "Bogus cache directory was created for dynamic version '" + dynamicVersion + "'");
+    }
+
+    @Test
     void parallelProjectsShareOneManagedRuntimePreparation() throws Exception {
         FixturePlatform platform = currentPlatform();
         Path projectDirectory = temporaryDirectory.resolve("parallel-projects");
@@ -398,6 +430,26 @@ class ManagedRuntimeFunctionalTest {
                             executable file('%s')
                         }
                         """.formatted(groovyQuote(executable))));
+    }
+
+    private static void writeProjectWithVersion(Path projectDirectory, String version) throws IOException {
+        Files.createDirectories(projectDirectory);
+        Files.writeString(projectDirectory.resolve("settings.gradle"), "");
+        Files.writeString(projectDirectory.resolve("build.gradle"), """
+                plugins {
+                    id 'dev.elide'
+                }
+
+                elide {
+                    runtimeMode = dev.elide.gradle.ElideRuntimeMode.MANAGED
+                    runtimeVersion = '%s'
+                    enableJavaCompiler = false
+                }
+
+                tasks.register('verifyManagedRuntime') {
+                    dependsOn 'prepareElideRuntime'
+                }
+                """.formatted(version));
     }
 
     private static GradleRunner runner(Path projectDirectory, Path gradleUserHome) {

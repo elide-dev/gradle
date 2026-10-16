@@ -229,10 +229,41 @@ public final class ElideRuntimeResolver {
     private static String requireManagedVersion(ElideExtension extension) {
         String version = extension.getRuntimeVersion().getOrNull();
         if (version == null || version.isBlank()) {
-            throw new org.gradle.api.GradleException("Elide " + effectiveMode(extension)
+            throw new GradleException("Elide " + effectiveMode(extension)
                     + " runtime requires a concrete version; configure elide.runtime.version "
                     + "or versionFrom in settings");
         }
+        if (isDynamicVersion(version)) {
+            throw new GradleException("Elide " + effectiveMode(extension)
+                    + " runtime requires a concrete version, but '" + version
+                    + "' is a dynamic or rich version; configure elide.runtime.version "
+                    + "or versionFrom in settings");
+        }
         return version;
+    }
+
+    /**
+     * Whether a configured version is a Gradle dynamic or rich version rather than a concrete
+     * release tag.
+     *
+     * <p>Managed provisioning uses the version verbatim as both the cache directory name and the
+     * GitHub release tag, so a dynamic version such as {@code 1.5.+} or a range such as
+     * {@code [1.5,2.0)} is guaranteed to fail — with a 404 or an invalid URI — and must be
+     * rejected at the gate rather than after creating a bogus cache directory.
+     *
+     * <p>Concrete versions that are not semantic — prerelease tags ({@code 1.6.0-rc.2}), fixture
+     * tags ({@code fixture-1.0}), and build metadata ({@code 1.5.1+20260903}) — are accepted,
+     * because they identify a specific release.
+     */
+    static boolean isDynamicVersion(String version) {
+        String stripped = version.strip();
+        if (stripped.startsWith("[") || stripped.startsWith("(")) {
+            return true;
+        }
+        if (stripped.equals("+") || stripped.endsWith(".+")) {
+            return true;
+        }
+        return stripped.equalsIgnoreCase("latest.release")
+                || stripped.equalsIgnoreCase("latest.integration");
     }
 }
