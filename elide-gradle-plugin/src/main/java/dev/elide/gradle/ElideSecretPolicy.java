@@ -34,8 +34,9 @@ import java.util.regex.Pattern;
  *       {@code myApiToken}.
  *   <li><b>Ambiguous words, matched as whole name segments.</b> Words such as {@code KEY} and
  *       {@code AUTH} do occur innocently, so the name is split on {@code _}, {@code -} and
- *       {@code .} and a segment must match exactly. This is what keeps {@code KEYBOARD} and
- *       {@code MONKEY} out of it.
+ *       {@code .}, with a camelCase boundary treated as a segment boundary too, and a segment
+ *       must match exactly. This is what keeps {@code KEYBOARD} and {@code MONKEY} out of it
+ *       while still catching {@code sessionCookie} and {@code ORG_GRADLE_PROJECT_myKey}.
  *   <li><b>Value shape.</b> Some names carry credentials without saying so -- {@code GH_PAT},
  *       {@code DATABASE_URL} -- so a value that looks like a credential is redacted whatever it is
  *       called.
@@ -153,10 +154,15 @@ final class ElideSecretPolicy {
         if (looksLikeCredential(value)) {
             return true;
         }
-        if (BENIGN_NAMES.contains(upperCaseName)) {
+        // Treat a lower-to-upper case transition as a segment boundary, so a camelCase name
+        // like sessionCookie splits like SESSION_COOKIE rather than SESSIONCOOKIE. The benign
+        // list is checked against the same segmented form, so a known-safe camelCase name such
+        // as SshAuthSock (-> SSH_AUTH_SOCK) is still excluded.
+        String normalizedName = segmentCamelCase(name).toUpperCase(Locale.ROOT);
+        if (BENIGN_NAMES.contains(normalizedName)) {
             return false;
         }
-        return hasSensitiveSegment(upperCaseName);
+        return hasSensitiveSegment(normalizedName);
     }
 
     private static boolean isTooShortToCarryASecret(String value) {
@@ -190,6 +196,15 @@ final class ElideSecretPolicy {
             }
         }
         return false;
+    }
+
+    /**
+     * Inserts a boundary before each uppercase letter that follows a lowercase letter, so a
+     * camelCase name splits like its screaming-snake equivalent: {@code sessionCookie} becomes
+     * {@code session_Cookie}, which upper-cases to {@code SESSION_COOKIE}.
+     */
+    private static String segmentCamelCase(String name) {
+        return name.replaceAll("([a-z])([A-Z])", "$1_$2");
     }
 
     private static boolean hasSensitiveSegment(String upperCaseName) {

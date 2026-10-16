@@ -51,6 +51,14 @@ class ElideSecretPolicyTest {
             "myApiToken|0123456789abcdef0123",
             "signingPassword|s3cr3t-passphrase",
             "my_private_key|LS0tLS1CRUdJTiBQR1A=",
+            // camelCase forms of ambiguous segment words: the same words that are caught
+            // when underscore-separated (SESSION_COOKIE, GH_PAT, API_KEY) must also be
+            // caught when Gradle receives them glued in camelCase.
+            "sessionCookie|abcdef0123456789",
+            "ORG_GRADLE_PROJECT_sessionCookie|abcdef0123456789",
+            "ORG_GRADLE_PROJECT_myKey|supersecretvalue99",
+            "gitlabPat|somewhat-opaque-value",
+            "authKey|supersecretvalue99",
             // A short password is still a password. The general length floor exists to stop
             // anonymous short values colliding with output, not to excuse a declared credential.
             "ORG_GRADLE_PROJECT_signingPassword|abcde",
@@ -86,6 +94,12 @@ class ElideSecretPolicyTest {
             "KEYBOARD_LAYOUT|us-intl",
             "MONKEY_PATCH_MODE|enabled",
             "KEYMAP_PATH|/usr/share/keymaps",
+            // camelCase forms of the same false positives: segmentation must not turn them
+            // into sensitive segments.
+            "keyboardLayout|us-intl",
+            // camelCase form of a benign name: the benign list is checked against the
+            // segmented form, so SshAuthSock is still excluded just like SSH_AUTH_SOCK.
+            "SshAuthSock|/tmp/ssh-XXXXXXXX/agent.1234",
             // Everyday variables whose values appear verbatim in compiler output.
             "PWD|/home/datafox/project",
             "USER|datafox",
