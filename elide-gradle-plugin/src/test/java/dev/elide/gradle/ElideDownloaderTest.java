@@ -7,15 +7,19 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.time.Duration;
+import java.util.concurrent.CountDownLatch;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ElideDownloaderTest {
     @TempDir
@@ -62,6 +66,32 @@ class ElideDownloaderTest {
         }
     }
 
+    @Test
+    void failsWhenTheArchiveDownloadStallsRatherThanHangingIndefinitely() throws Exception {
+        byte[] archive = "fixture archive".getBytes(StandardCharsets.UTF_8);
+        try (StallingServer server = StallingServer.start(archive, sha256(archive))) {
+            Path target = temporaryDirectory.resolve("elide.tgz");
+            HttpClient client = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .connectTimeout(Duration.ofSeconds(2))
+                    .build();
+            ElideDownloader downloader = new ElideDownloader(client, Duration.ofSeconds(2));
+
+            long start = System.nanoTime();
+            assertThrows(IOException.class, () -> downloader.downloadVerified(server.release(), target));
+            long elapsed = System.nanoTime() - start;
+
+            assertTrue(elapsed < Duration.ofSeconds(15).toNanos(),
+                    "stalled download should fail within 15 seconds, took "
+                            + Duration.ofNanos(elapsed).toSeconds() + "s");
+            assertFalse(Files.exists(target), "target should not exist after a failed download");
+            try (Stream<Path> files = Files.list(temporaryDirectory)) {
+                assertFalse(files.anyMatch(path -> path.getFileName().toString().contains(".tmp")),
+                        "no partial download temp files should remain");
+            }
+        }
+    }
+
     private static String sha256(byte[] bytes) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
         StringBuilder result = new StringBuilder(digest.length * 2);
@@ -104,6 +134,49 @@ class ElideDownloaderTest {
 
         @Override
         public void close() {
+            server.stop(0);
+        }
+    }
+
+    private static final class StallingServer implements AutoCloseable {
+        private final HttpServer server;
+        private final CountDownLatch stallLatch;
+
+        private StallingServer(HttpServer server, CountDownLatch stallLatch) {
+            this.server = server;
+            this.stallLatch = stallLatch;
+        }
+
+        static StallingServer start(byte[] archive, String checksum) throws IOException {
+            HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            byte[] checksumBytes = (checksum + "  elide.linux-amd64.tgz\n").getBytes(StandardCharsets.UTF_8);
+            server.createContext("/releases/v1.5.1/elide.linux-amd64.tgz.sha256", exchange -> {
+                exchange.sendResponseHeaders(200, checksumBytes.length);
+                exchange.getResponseBody().write(checksumBytes);
+                exchange.close();
+            });
+            CountDownLatch latch = new CountDownLatch(1);
+            server.createContext("/releases/v1.5.1/elide.linux-amd64.tgz", exchange -> {
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            server.start();
+            return new StallingServer(server, latch);
+        }
+
+        ElideRelease release() {
+            return new ElideRelease(
+                    URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/releases"),
+                    "1.5.1",
+                    ElidePlatform.detect("Linux", "amd64"));
+        }
+
+        @Override
+        public void close() {
+            stallLatch.countDown();
             server.stop(0);
         }
     }
