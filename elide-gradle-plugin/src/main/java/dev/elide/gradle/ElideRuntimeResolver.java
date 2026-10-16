@@ -207,7 +207,14 @@ public final class ElideRuntimeResolver {
                 ElideTaskName.ELIDE_RUNTIME_PREPARE, PrepareElideRuntimeTask.class, task -> {
             task.setGroup("Elide");
             task.setDescription("Downloads and verifies the managed Elide runtime.");
-            task.getRuntimeVersion().set(managedVersion);
+            // The version input only matters when the task actually executes, which onlyIf
+            // limits to a MANAGED selection. Binding it unconditionally made Gradle's
+            // configuration-cache store -- which serializes task inputs for every task in the
+            // graph, including ones onlyIf will skip -- resolve an unresolvable catalog version
+            // and fail a PATH build that never provisions anything. The same reasoning already
+            // guarded the output directory above and the JavaCompile input in ElideGradlePlugin.
+            task.getRuntimeVersion().set(source.map(selected ->
+                    selected == ElideRuntimeSource.MANAGED ? managedVersion.get() : "unmanaged"));
             task.getPlatformOs().set(platform.os());
             task.getPlatformArch().set(platform.arch());
             task.getArchiveExtension().set(platform.archiveExtension());
