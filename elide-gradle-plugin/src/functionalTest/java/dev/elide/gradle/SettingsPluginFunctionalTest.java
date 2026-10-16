@@ -253,6 +253,65 @@ class SettingsPluginFunctionalTest {
     }
 
     @Test
+    void pathModeSucceedsWithAnUnresolvableCatalogVersionWhenAnExecutableIsOnPathWithConfigurationCache() throws IOException {
+        Assumptions.assumeFalse(PlatformFixture.isWindows(),
+                "The PATH fixture is a POSIX shell script.");
+        // The configuration-cache store serializes task input properties for every task in the
+        // graph, including ones onlyIf will skip. prepareElideRuntime is always registered, and
+        // its runtimeVersion @Input was bound to a provider that throws for a missing catalog
+        // alias. The store step resolved it and failed the build even though the onlyIf guard
+        // would have skipped the task. This fixture -- the missing-alias PATH scenario under
+        // --configuration-cache -- is the one resolution point the non-config-cache fixtures
+        // never reach.
+        Path projectDirectory = temporaryDirectory.resolve("path-unresolvable-version-config-cache");
+        Files.createDirectories(projectDirectory.resolve("app"));
+        Files.createDirectories(projectDirectory.resolve("gradle"));
+        Path executableDirectory = projectDirectory.resolve("bin");
+        Files.createDirectories(executableDirectory);
+        Path executable = executableDirectory.resolve("elide");
+        Files.writeString(executable, "#!/bin/sh\nexit 0\n");
+        executable.toFile().setExecutable(true);
+        Files.writeString(projectDirectory.resolve("gradle/libs.versions.toml"), """
+                [versions]
+                other = "1.0"
+                """);
+        Files.writeString(projectDirectory.resolve("settings.gradle.kts"), """
+                import dev.elide.gradle.ElideRuntimeMode
+
+                plugins { id("dev.elide.settings") }
+                elide {
+                    runtime {
+                        mode = ElideRuntimeMode.PATH
+                        versionFrom("libs", "elide")
+                    }
+                }
+                include("app")
+                """);
+        Files.writeString(projectDirectory.resolve("app/build.gradle.kts"), """
+                plugins { id("dev.elide"); id("java") }
+                """);
+
+        Map<String, String> environment = new HashMap<>(System.getenv());
+        environment.put("PATH", executableDirectory.toString());
+        environment.put("GRADLE_USER_HOME", projectDirectory.resolve("gradle-user-home").toString());
+        GradleRunner runner = configuredRunner(projectDirectory)
+                .withEnvironment(environment);
+
+        // The first invocation must store the configuration cache; the second must reuse it. The
+        // store step is the one that resolves skipped-task inputs, so a stored entry proves the
+        // unresolvable version was never read while serializing prepareElideRuntime.
+        BuildResult first = runner.withArguments(":app:compileJava", "--configuration-cache").build();
+        BuildResult second = runner.withArguments(":app:compileJava", "--configuration-cache").build();
+
+        assertTrue(first.getOutput().contains("BUILD SUCCESSFUL"), first.getOutput());
+        assertTrue(first.getOutput().contains("Configuration cache entry stored"), first.getOutput());
+        assertFalse(first.getOutput().contains("Elide version alias 'elide' does not exist"),
+                first.getOutput());
+        assertTrue(second.getOutput().contains("BUILD SUCCESSFUL"), second.getOutput());
+        assertTrue(second.getOutput().contains("Configuration cache entry reused"), second.getOutput());
+    }
+
+    @Test
     void pathModeCompilesWithAnUnresolvableCatalogVersionWhenTheCompilerIsEnabled() throws IOException {
         Assumptions.assumeFalse(PlatformFixture.isWindows(),
                 "The PATH fixture is a POSIX shell script.");
