@@ -11,7 +11,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -20,13 +22,22 @@ public final class ElideDownloader {
     private static final Pattern SHA256_LINE = Pattern.compile("^([0-9a-fA-F]{64})(?:\\s+\\*?\\S+)?$");
 
     private final HttpClient client;
+    private final Duration requestTimeout;
 
     public ElideDownloader() {
-        this(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build());
+        this(HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(30))
+                .build());
     }
 
     ElideDownloader(HttpClient client) {
+        this(client, Duration.ofMinutes(10));
+    }
+
+    ElideDownloader(HttpClient client, Duration requestTimeout) {
         this.client = client;
+        this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout");
     }
 
     public void downloadVerified(ElideRelease release, Path archiveTarget) throws IOException, InterruptedException {
@@ -128,7 +139,7 @@ public final class ElideDownloader {
 
     private void download(URI uri, Path destination) throws IOException, InterruptedException {
         HttpResponse<Path> response = client.send(
-                HttpRequest.newBuilder(uri).GET().build(),
+                HttpRequest.newBuilder(uri).GET().timeout(requestTimeout).build(),
                 HttpResponse.BodyHandlers.ofFile(destination));
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new IOException("Unable to download " + uri + ": HTTP " + response.statusCode());

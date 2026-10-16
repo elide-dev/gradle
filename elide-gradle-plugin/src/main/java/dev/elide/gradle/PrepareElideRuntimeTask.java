@@ -6,6 +6,7 @@ import org.gradle.api.file.ArchiveOperations;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.file.FileSystemOperations;
+import org.gradle.api.logging.Logger;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.OutputDirectory;
@@ -28,6 +29,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 
@@ -81,7 +83,7 @@ public abstract class PrepareElideRuntimeTask extends DefaultTask {
         Path lockFile = versionDirectory.resolve(runtimeDirectory.getFileName() + ".lock");
         Files.createDirectories(versionDirectory);
         try (FileChannel channel = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
-             FileLock ignored = lock(channel)) {
+             FileLock ignored = lock(channel, getLogger(), LOCK_WAIT_TIMEOUT)) {
             prepareWhileLocked(runtimeDirectory);
         }
     }
@@ -231,13 +233,28 @@ public abstract class PrepareElideRuntimeTask extends DefaultTask {
         }
     }
 
-    private static FileLock lock(FileChannel channel) throws IOException, InterruptedException {
+    private static final Duration LOCK_WAIT_TIMEOUT = Duration.ofMinutes(30);
+
+    static FileLock lock(FileChannel channel, Logger logger, Duration timeout)
+            throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        boolean reported = false;
         while (true) {
             try {
-                return channel.lock();
+                FileLock fileLock = channel.tryLock();
+                if (fileLock != null) {
+                    return fileLock;
+                }
             } catch (OverlappingFileLockException ignored) {
-                Thread.sleep(50);
             }
+            if (!reported) {
+                logger.lifecycle("Waiting for Elide runtime lock held by another build...");
+                reported = true;
+            }
+            if (System.nanoTime() >= deadline) {
+                throw new GradleException("Timed out waiting for Elide runtime lock; another build may be stuck");
+            }
+            Thread.sleep(50);
         }
     }
 
