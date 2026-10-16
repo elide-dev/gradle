@@ -34,10 +34,18 @@ final class ElideVersionResolver {
                 () -> new ElideVersionResolutionException(
                         "Elide version catalog '" + catalogName + "' does not exist for project "
                                 + project.getPath()));
-        return catalog.findVersion(alias).orElseThrow(
-                        () -> new ElideVersionResolutionException(
-                                "Elide version alias '" + alias + "' does not exist in catalog '"
-                                        + catalogName + "' for project " + project.getPath()))
-                .getRequiredVersion();
+        var constraint = catalog.findVersion(alias).orElseThrow(
+                () -> new ElideVersionResolutionException(
+                        "Elide version alias '" + alias + "' does not exist in catalog '"
+                                + catalogName + "' for project " + project.getPath()));
+        String version = !constraint.getRequiredVersion().isBlank() ? constraint.getRequiredVersion()
+                : !constraint.getStrictVersion().isBlank() ? constraint.getStrictVersion()
+                : constraint.getPreferredVersion();
+        if (version.isBlank()) {
+            throw new ElideVersionResolutionException(
+                    "Elide version alias '" + alias + "' in catalog '" + catalogName
+                            + "' for project " + project.getPath() + " does not declare a concrete version");
+        }
+        return version;
     }
 }
