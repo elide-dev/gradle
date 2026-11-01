@@ -35,7 +35,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: "Setup: Gradle"
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: "Check: Tag matches version"
         run: |
           version="$(sed -n 's/^version=//p' gradle.properties)"
@@ -91,7 +91,7 @@ jobs:
           distribution: temurin
           java-version: "17"
       - name: "Setup: Gradle"
-        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
       - name: "Publish: Maven Central"
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
