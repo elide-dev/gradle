@@ -8,6 +8,8 @@ release is cut.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-07
+
 ### Changed
 
 - The plugins and the catalog are published to Maven Central instead of the Gradle Plugin Portal. Add `mavenCentral()`
