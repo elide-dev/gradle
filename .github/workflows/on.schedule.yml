@@ -34,6 +34,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             services.gradle.org:443
+            downloads.gradle.org:443
             github.com:443
             release-assets.githubusercontent.com:443
             objects.githubusercontent.com:443
@@ -57,4 +58,4 @@ jobs:
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
       - name: "Integration: Real Elide install, compile, and run"
         working-directory: .
-        run: ${{ matrix.gradle-command }} realRuntimeSmoke -Pelide.runtime.mode=MANAGED
+        run: ${{ matrix.gradle-command }} realRuntimeSmoke "-Pelide.runtime.mode=MANAGED" --stacktrace
