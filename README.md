@@ -21,7 +21,7 @@ pluginManagement {
 }
 
 plugins {
-    id("dev.elide.settings") version "1.1.0"
+    id("dev.elide.settings") version "1.2.0"
 }
 
 elide {
